@@ -1,0 +1,314 @@
+libfilezilla (0.37.2-1) UNRELEASED; urgency=medium
+
+  * update
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Thu, 19 May 2022 10:17:18 +0800
+
+libfilezilla (0.37.2-1) unstable; urgency=medium
+
+  * New upstream version 0.37.2
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sat, 30 Apr 2022 17:02:09 +0100
+
+libfilezilla (0.37.1-2) unstable; urgency=medium
+
+  * Correct soanme bump back to libfilezilla25
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sat, 09 Apr 2022 18:05:32 +0100
+
+libfilezilla (0.37.1-1) unstable; urgency=medium
+
+  * New upstream version 0.37.1
+  * Soname bump rename package to libfilezilla26
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sat, 09 Apr 2022 07:30:43 +0100
+
+libfilezilla (0.37.0-2) unstable; urgency=medium
+
+  * Source only upload for migration to testing
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Thu, 07 Apr 2022 05:11:45 +0100
+
+libfilezilla (0.37.0-1) unstable; urgency=medium
+
+  * New upstream version 0.37.0
+  * Soname bump rename package to libfilezilla25
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sun, 03 Apr 2022 09:41:09 +0100
+
+libfilezilla (0.36.0-2) unstable; urgency=medium
+
+  * Source only upload for migration to testing
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sat, 12 Feb 2022 08:39:20 +0000
+
+libfilezilla (0.36.0-1) unstable; urgency=medium
+
+  * New upstream version 0.36.0
+  * Soname bump rename package to libfilezilla24
+  * Update d/copyright date and data
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sun, 06 Feb 2022 20:56:35 +0000
+
+libfilezilla (0.35.0-2) unstable; urgency=medium
+
+  * Remove additional whitespace from d/control
+  * Source only upload for migration to testing
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Tue, 04 Jan 2022 18:47:14 +0000
+
+libfilezilla (0.35.0-1) unstable; urgency=medium
+
+  * New upstream version 0.35.0
+  * Soname bump rename package to libfilezilla23
+  * Add d/source/lintian-overrides for issues we can nothing about:
+    libfilezilla source: debian-watch-does-not-check-gpg-signature
+    libfilezilla source: very-long-line-length-in-source-file
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Tue, 21 Dec 2021 10:10:03 +0000
+
+libfilezilla (0.34.2-3) unstable; urgency=medium
+
+  * Source only upload for migration to testing
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Tue, 21 Dec 2021 05:01:07 +0000
+
+libfilezilla (0.34.2-2) unstable; urgency=medium
+
+  * Moved archicture independent files to new libfilezilla-common package
+    making upgrades smoother (Closes: #998450)
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Mon, 13 Dec 2021 15:59:54 +0000
+
+libfilezilla (0.34.2-1) unstable; urgency=medium
+
+  * New upstream version 0.34.2
+  * Soname bump rename package to libfilezilla22
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Wed, 27 Oct 2021 08:30:17 +0100
+
+libfilezilla (0.34.1-1) unstable; urgency=medium
+
+  * New upstream version 0.34.1
+  * Update Standards-Version to 4.6.0.1 - No changes required
+  * Change maintainer to myself
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Wed, 20 Oct 2021 09:50:57 +0100
+
+libfilezilla (0.34.0-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 0.34.0
+  * Update libgnutls28-dev Build-Depends to >= 3.7.0
+  * Soname bump rename package to libfilezilla21
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Tue, 12 Oct 2021 07:33:52 +0100
+
+libfilezilla (0.32.0-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 0.32.0
+  * Soname bump rename package to libfilezilla19
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Thu, 16 Sep 2021 18:15:55 +0100
+
+libfilezilla (0.31.0-1) experimental; urgency=medium
+
+  * Team upload
+  * New upstream version 0.31.0
+  * Soname bump rename package to libfilezilla16
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Wed, 28 Jul 2021 19:26:29 +0100
+
+libfilezilla (0.30.0-1) experimental; urgency=medium
+
+  * Team upload
+  * New upstream version 0.30.0
+  * Soname bump rename package to libfilezilla15
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sat, 10 Jul 2021 05:42:01 +0100
+
+libfilezilla (0.28.0-1) experimental; urgency=medium
+
+  * Team upload
+  * New upstream version 0.28.0
+  * d/copyright: Add 'Upstream-Contact'
+  * Removed no longer needed: d/patches/01-libfilezilla-gcc11.patch
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Tue, 04 May 2021 23:04:10 +0100
+
+libfilezilla (0.27.1-2) experimental; urgency=medium
+
+  * Team upload.
+  * Fix FTBS with gcc11. (Closes: #984101)
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sat, 24 Apr 2021 13:46:00 +0100
+
+libfilezilla (0.27.1-1) experimental; urgency=medium
+
+  * Team upload
+  * New upstream version 0.27.1
+  * Soname bump rename package to libfilezilla12
+  * Made libfilezilla12 Multi-Arch: same - Suggested by multiarch hinter
+  * Made libfilezilla-dev Multi-Arch: same - Suggested by multiarch hinter
+  * d/control: Remove all Breaks
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Sat, 20 Mar 2021 10:38:22 +0000
+
+libfilezilla (0.26.0-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 0.26.0
+  * Update Standards-Version to 4.5.1 - No changes required
+  * Soname bump rename runtime package to libfilezilla11
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Thu, 17 Dec 2020 14:48:06 +0000
+
+libfilezilla (0.25.0-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 0.25.0
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Mon, 19 Oct 2020 08:41:18 +0100
+
+libfilezilla (0.24.1-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 0.24.1
+  * Add 'debian/upstream/metadata'
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Mon, 24 Aug 2020 11:20:46 +0100
+
+libfilezilla (0.23.0-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 0.23.0
+  * Add hardening
+  * Use override_dh_auto_install and remove .la file(s)
+  * Bump std-version to 4.5.0, no changes required
+  * Bump debhelper-compat to 13
+  * Add Rules-Requires-Root: no
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Thu, 30 Jul 2020 21:03:46 +0100
+
+libfilezilla (0.19.3-1) unstable; urgency=medium
+
+  [ Gianfranco Costamagna ]
+  * Import the new release on git
+
+  [ Phil Wyett ]
+  * Team upload
+  * New upstream version 0.19.3
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Mon, 23 Dec 2019 20:28:17 +0000
+
+libfilezilla (0.18.2-4) unstable; urgency=medium
+
+  * Team upload
+  * Bump std-version to 4.4.1, no changes required
+  * Switch to new debhelper-compat 12 notation
+  * Break filezilla << 3.45.1-1 (Closes: #943433)
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 25 Oct 2019 12:15:45 +0200
+
+libfilezilla (0.18.2-3) unstable; urgency=medium
+
+  * Add latomic to fix link failures on some architectures
+    such as armel, mipsel, m68k, powerpc, sh4
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 23 Oct 2019 23:59:12 +0200
+
+libfilezilla (0.18.2-2) unstable; urgency=medium
+
+  * Break filezilla <= 3.39.0-2, to avoid crashes due to changes in symbol
+    files (Closes: #941193)
+    Don't use << of the next version, since 3.39.0-2 is already on stable, and
+    as simple binNMU will make it work with the current libfilezilla.
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 23 Oct 2019 23:34:15 +0200
+
+libfilezilla (0.18.2-1) unstable; urgency=medium
+
+  * New upstream release
+  * Added libgnutls28-dev build-dep
+  * Updated Standards-Version to 4.4.0, no change needed
+  * Updated dh compat to 12
+  * debian/libfilezilla0.install: include translations
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Mon, 23 Sep 2019 09:38:28 +0200
+
+libfilezilla (0.15.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * Build-dep on nettle-dev (>= 3.1)
+  * debian/watch: use https
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Mon, 07 Jan 2019 11:23:52 +0100
+
+libfilezilla (0.12.3-1) unstable; urgency=medium
+
+  * New upstream release
+  * Updated Vcs-* URLs with Salsa ones
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Fri, 15 Jun 2018 15:18:47 +0200
+
+libfilezilla (0.11.0-1) unstable; urgency=medium
+
+  * Team upload
+  * Bump std-version to 4.1.1
+  * New upstream version 0.11.0
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sun, 29 Oct 2017 12:39:47 +0100
+
+libfilezilla (0.10.0-1) unstable; urgency=medium
+
+  * Team upload.
+  * Update watch file
+  * New upstream version 0.10.0
+  * Add pkg-config from <rene@debian.org> (Closes: #862125)
+  * Bump std-version to 4.0.0, no changes required
+  * Bump autoreconf to 10
+  * Update copyright years
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Tue, 11 Jul 2017 09:54:59 +0200
+
+libfilezilla (0.9.0-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Tue, 17 Jan 2017 16:13:46 +0100
+
+libfilezilla (0.7.0-1) unstable; urgency=medium
+
+  * Team Upload
+  * New upstream release
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Tue, 27 Sep 2016 10:56:33 +0200
+
+libfilezilla (0.6.1-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Thu, 28 Jul 2016 11:44:04 +0200
+
+libfilezilla (0.6.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Use dh_makeshlibs -V so that packages built against libfilezilla get a
+    correct versioned dependency
+  * Fixed libfilezilla0 description: it does not include the static library
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Tue, 26 Jul 2016 15:16:05 +0200
+
+libfilezilla (0.5.3-1) unstable; urgency=medium
+
+  * New upstream release
+  * Updated Standards-Version to 3.9.8, no change needed
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Wed, 06 Jul 2016 16:07:41 +0200
+
+libfilezilla (0.4.0.1-1) unstable; urgency=low
+
+  * Initial release (Closes: #815763)
+
+ -- Adrien Cunin <adri2000@ubuntu.com>  Wed, 17 Feb 2016 16:04:03 +0100

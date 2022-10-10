@@ -1,0 +1,71 @@
+Source: libfilezilla
+Priority: optional
+Maintainer: Phil Wyett <philip.wyett@kathenas.org>
+Build-Depends: debhelper-compat (= 13),
+               libcppunit-dev,
+               pkg-config,
+               nettle-dev (>= 3.1),
+               libgnutls28-dev (>= 3.7.0)
+Standards-Version: 4.6.0.1
+Rules-Requires-Root: no
+Section: libs
+Homepage: https://lib.filezilla-project.org/
+Vcs-Git: https://salsa.debian.org/debian/libfilezilla.git
+Vcs-Browser: https://salsa.debian.org/debian/libfilezilla
+
+Package: libfilezilla-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libfilezilla25 (= ${binary:Version}), ${misc:Depends}
+Description: build high-performing platform-independent programs (development)
+ Free, open source C++ library, offering some basic functionality to build
+ high-performing, platform-independent programs. Some of the highlights include:
+ .
+  - A typesafe, multi-threaded event system that's very simple to use yet
+    extremely efficient
+  - Timers for periodic events
+  - A datetime class that not only tracks timestamp but also their accuracy,
+    which simplifies dealing with timestamps originating from different sources
+  - Simple process handling for spawning child processes with redirected I/O
+ .
+ This package contains the development files for the library.
+
+Package: libfilezilla-common
+Architecture: all
+Multi-Arch: foreign
+Breaks: libfilezilla0, libfilezilla11, libfilezilla19, libfilezilla21, libfilezilla22 (<< 0.34.2-2)
+Replaces: libfilezilla0, libfilezilla11, libfilezilla19, libfilezilla21, libfilezilla22 (<< 0.34.2-2)
+Depends: ${misc:Depends}
+Description: build high-performing platform-independent programs (translations)
+ Free, open source C++ library, offering some basic functionality to build
+ high-performing, platform-independent programs. Some of the highlights include:
+ .
+  - A typesafe, multi-threaded event system that's very simple to use yet
+    extremely efficient
+  - Timers for periodic events
+  - A datetime class that not only tracks timestamp but also their accuracy,
+    which simplifies dealing with timestamps originating from different sources
+  - Simple process handling for spawning child processes with redirected I/O
+ .
+ This package contains architecture independent files such as images
+ and translations.
+
+Package: libfilezilla25
+Architecture: any
+Multi-Arch: same
+Conflicts: libfilezilla0, libfilezilla11, libfilezilla19, libfilezilla21
+Replaces: libfilezilla0, libfilezilla11, libfilezilla19, libfilezilla21
+Depends: libfilezilla-common (>= ${source:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: build high-performing platform-independent programs (runtime lib)
+ Free, open source C++ library, offering some basic functionality to build
+ high-performing, platform-independent programs. Some of the highlights include:
+ .
+  - A typesafe, multi-threaded event system that's very simple to use yet
+    extremely efficient
+  - Timers for periodic events
+  - A datetime class that not only tracks timestamp but also their accuracy,
+    which simplifies dealing with timestamps originating from different sources
+  - Simple process handling for spawning child processes with redirected I/O
+ .
+ This package contains the shared library.
