@@ -215,6 +215,8 @@ public:
 	/** \brief Get timestamp as struct tm
 	 *
 	 * Undefined if datetime is empty.
+	 * 
+	 * Note: On Windows the tm_yday and tm_isdst fields are undefined.
 	 */
 	tm get_tm(zone z) const;
 
@@ -328,6 +330,11 @@ public:
 		return *this;
 	}
 
+	duration& operator/=(int64_t op) {
+		ms_ /= op;
+		return *this;
+	}
+
 	duration operator-() const {
 		return duration(-ms_);
 	}
@@ -352,6 +359,7 @@ public:
 
 	friend duration FZ_PUBLIC_SYMBOL operator-(duration const& a, duration const& b);
 	friend duration FZ_PUBLIC_SYMBOL operator+(duration const& a, duration const& b);
+	friend duration FZ_PUBLIC_SYMBOL operator/(duration const& a, int64_t b);
 private:
 	explicit FZ_PRIVATE_SYMBOL duration(int64_t ms) : ms_(ms) {}
 
@@ -366,6 +374,11 @@ inline duration operator-(duration const& a, duration const& b)
 inline duration operator+(duration const& a, duration const& b)
 {
 	return duration(a) += b;
+}
+
+inline duration operator/(duration const& a, int64_t b)
+{
+	return duration(a) /= b;
 }
 
 /** \relates datetime
@@ -404,6 +417,10 @@ public:
 	{
 		return monotonic_clock(*this) += d;
 	}
+	monotonic_clock const operator-(duration const& d) const
+	{
+		return monotonic_clock(*this) += d;
+	}
 
 private:
 	typedef std::chrono::steady_clock clock_type;
@@ -412,7 +429,7 @@ private:
 public:
 	/// Gets the current point in time time
 	static monotonic_clock now() {
-		return monotonic_clock(clock_type::now());
+		return monotonic_clock(std::chrono::time_point_cast<std::chrono::milliseconds>(clock_type::now()));
 	}
 
 	explicit operator bool() const {

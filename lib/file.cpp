@@ -1,5 +1,6 @@
 #include "libfilezilla/libfilezilla.hpp"
 #include "libfilezilla/file.hpp"
+#include "libfilezilla/time.hpp"
 
 #ifdef FZ_WINDOWS
 #include "windows/security_descriptor_builder.hpp"
@@ -54,7 +55,7 @@ result file::open(native_string const& f, mode m, creation_flags d)
 	}
 
 	DWORD dispositionFlags;
-	if (m == writing) {
+	if (m == writing || m == readwrite) {
 		if (d & empty) {
 			dispositionFlags = CREATE_ALWAYS;
 		}
@@ -87,7 +88,14 @@ result file::open(native_string const& f, mode m, creation_flags d)
 		}
 		attr.lpSecurityDescriptor = sd;
 	}
-	fd_ = CreateFile(f.c_str(), (m == reading) ? GENERIC_READ : GENERIC_WRITE, shareMode, &attr, dispositionFlags, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+	DWORD access{};
+	if (m != writing) {
+		access |= GENERIC_READ;
+	}
+	if (m != reading) {
+		access |= GENERIC_WRITE;
+	}
+	fd_ = CreateFileW(f.c_str(), access, shareMode, &attr, dispositionFlags, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
 
 	if (fd_ == INVALID_HANDLE_VALUE) {
 		auto const err = GetLastError();
@@ -201,6 +209,20 @@ bool file::fsync()
 	return FlushFileBuffers(fd_) != 0;
 }
 
+bool file::set_modification_time(datetime const& t)
+{
+	if (t.empty()) {
+		return false;
+	}
+
+	FILETIME ft = t.get_filetime();
+	if (!ft.dwHighDateTime) {
+		return false;
+	}
+
+	return SetFileTime(fd_, nullptr, &ft, &ft) == TRUE;
+}
+
 #else
 
 file::file(file && op) noexcept
@@ -232,7 +254,8 @@ result file::open(native_string const& f, mode m, creation_flags d)
 		flags |= O_RDONLY;
 	}
 	else {
-		flags |= O_WRONLY | O_CREAT;
+		flags |= (m == writing) ? O_WRONLY : O_RDWR;
+		flags |= O_CREAT;
 		if (d & empty) {
 			flags |= O_TRUNC;
 		}
@@ -283,7 +306,9 @@ int64_t file::size() const
 
 	struct stat buf;
 	if (!fstat(fd_, &buf)) {
-		ret = buf.st_size;
+		if (!S_ISCHR(buf.st_mode)) {
+			ret = buf.st_size;
+		}
 	}
 
 	return ret;
@@ -364,6 +389,19 @@ bool file::fsync()
 #else
 	return ::fsync(fd_) == 0;
 #endif
+}
+
+bool file::set_modification_time(datetime const& t)
+{
+	if (t.empty()) {
+		return false;
+	}
+
+	struct timespec times[2]{};
+	times[0].tv_nsec = UTIME_OMIT;
+	times[1].tv_sec = t.get_time_t();
+	times[1].tv_nsec = t.get_milliseconds() * 1000000;
+	return futimens(fd_, times) == 0;
 }
 
 #endif

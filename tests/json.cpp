@@ -6,6 +6,7 @@ class json_test final : public CppUnit::TestFixture
 {
 	CPPUNIT_TEST_SUITE(json_test);
 	CPPUNIT_TEST(test_surrogate_pair);
+	CPPUNIT_TEST(test_subscript);
 	CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -13,6 +14,7 @@ public:
 	void tearDown() {}
 
 	void test_surrogate_pair();
+	void test_subscript();
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(json_test);
@@ -29,3 +31,15 @@ void json_test::test_surrogate_pair()
 	CPPUNIT_ASSERT(u[2] == 0x98);
 	CPPUNIT_ASSERT(u[3] == 0x81);
 }
+
+void json_test::test_subscript()
+{
+	fz::json jo;
+	jo["foo"] = "bar";
+	CPPUNIT_ASSERT(jo.type() == fz::json_type::object);
+
+	fz::json ja;
+	ja[0] = "bar";
+	CPPUNIT_ASSERT(ja.type() == fz::json_type::array);
+}
+

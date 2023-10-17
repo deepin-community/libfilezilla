@@ -1,6 +1,25 @@
 #include "libfilezilla/iputils.hpp"
 #include "libfilezilla/encode.hpp"
 
+#if FZ_WINDOWS
+#include "libfilezilla/socket.hpp"
+#include "libfilezilla/glue/windows.hpp"
+#include <winsock2.h>
+#include <iphlpapi.h>
+#include <memory>
+#elif __linux__
+#include "libfilezilla/socket.hpp"
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+
+#include <map>
+#endif
+
 namespace fz {
 template<typename String, typename Char = typename String::value_type, typename OutString = std::basic_string<Char>>
 OutString do_get_ipv6_long_form(String const& short_address)
@@ -278,4 +297,247 @@ address_type get_address_type(std::wstring_view const& address)
 {
 	return do_get_address_type(address);
 }
+
+
+std::optional<std::vector<network_interface>> FZ_PUBLIC_SYMBOL get_network_interfaces()
+{
+#if FZ_WINDOWS
+	static winsock_initializer init;
+	ULONG size = 16 * 1024;
+	auto buf = std::make_unique<char[]>(16 * 1024);
+	while (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_INCLUDE_PREFIX, nullptr, reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.get()), &size) != ERROR_SUCCESS) {
+		DWORD err = GetLastError();
+		if (err != ERROR_BUFFER_OVERFLOW) {
+			return {};
+		}
+		buf = std::make_unique<char[]>(size);
+	}
+
+	std::vector<network_interface> out;
+	for (auto cur = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.get()); cur; cur = cur->Next) {
+		std::wstring name = cur->FriendlyName;
+		auto raw_mac = fz::hex_encode<std::string>(std::string_view{ reinterpret_cast<char const*>(cur->PhysicalAddress), cur->PhysicalAddressLength });
+		std::string mac;
+		for (size_t i = 0; i < raw_mac.size(); ++i) {
+			if (i && !(i % 2)) {
+				mac += ':';
+			}
+			mac += raw_mac[i];
+		}
+
+		std::vector<std::string> ips;
+		for (auto addr = cur->FirstUnicastAddress; addr; addr = addr->Next) {
+			if (!addr->Address.lpSockaddr) {
+				continue;
+			}
+			if (addr->Address.lpSockaddr->sa_family != AF_INET && addr->Address.lpSockaddr->sa_family != AF_INET6) {
+				continue;
+			}
+			if (!(addr->Flags & IP_ADAPTER_ADDRESS_DNS_ELIGIBLE)) {
+				continue;
+			}
+			ips.emplace_back(fz::socket_base::address_to_string(addr->Address.lpSockaddr, addr->Address.iSockaddrLength, false, true) + '/' + to_string(addr->OnLinkPrefixLength));
+		}
+		if (!ips.empty()) {
+			out.emplace_back(network_interface{ std::move(name), std::move(mac), std::move(ips) });
+		}
+	}
+	return out;
+
+#elif __linux__
+	int fd = ::socket(AF_NETLINK, SOCK_DGRAM|SOCK_CLOEXEC, NETLINK_ROUTE);
+	if (fd == -1) {
+		return {};
+	}
+
+	std::map<int, std::pair<std::string, std::string>> interfaces;
+	auto get_interfaces = [&]() -> bool {
+		struct {
+			nlmsghdr hdr{};
+			ifinfomsg info{};
+		} req{};
+		req.hdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+		req.hdr.nlmsg_flags = NLM_F_REQUEST|NLM_F_DUMP;
+		req.hdr.nlmsg_type = RTM_GETLINK;
+		req.info.ifi_family = AF_UNSPEC;
+
+		if (send(fd, &req, sizeof(req), MSG_NOSIGNAL) != sizeof(req)) {
+			return false;
+		}
+
+		size_t constexpr bufsize = 32*1024;
+		auto buf = std::make_unique<char[]>(bufsize);
+
+		iovec iov{buf.get(), bufsize};
+		msghdr msg{};
+		sockaddr_nl sa{};
+		msg.msg_name = &sa;
+		msg.msg_namelen = sizeof(sa);
+		msg.msg_iov = &iov;
+		msg.msg_iovlen = 1;
+
+		bool done{};
+		while (!done) {
+			ssize_t r = recvmsg(fd, &msg, 0);
+
+			for (nlmsghdr *hdr = reinterpret_cast<nlmsghdr*>(buf.get()); NLMSG_OK(hdr, r); hdr = NLMSG_NEXT(hdr, r)) {
+				if (hdr->nlmsg_type == NLMSG_DONE) {
+					return true;
+				}
+				if (hdr->nlmsg_type == NLMSG_ERROR) {
+					return false;
+				}
+
+				if (hdr->nlmsg_type == RTM_NEWLINK) {
+					ifinfomsg *info = reinterpret_cast<ifinfomsg*>(NLMSG_DATA(hdr));
+
+					int index = info->ifi_index;
+					std::string name;
+					std::string addr;
+
+					rtattr* rta = IFLA_RTA(info);
+					size_t rtalen = hdr->nlmsg_len - NLMSG_LENGTH(sizeof(ifinfomsg));
+					while (RTA_OK(rta, rtalen)) {
+						//std::cerr << rta->rta_type << "\n";
+						switch (rta->rta_type) {
+							case IFLA_IFNAME:
+								name = std::string_view(reinterpret_cast<char*>(RTA_DATA(rta)), RTA_PAYLOAD(rta));
+								break;
+							case IFLA_ADDRESS: {
+								std::string_view v(reinterpret_cast<char*>(RTA_DATA(rta)), RTA_PAYLOAD(rta));
+								auto raw = fz::hex_encode<std::string>(v);
+								addr.clear();
+								for (size_t i = 0; i < raw.size(); ++i) {
+									if (i && !(i % 2)) {
+										addr += ':';
+									}
+									addr += raw[i];
+								}
+								break;
+							}
+						}
+						rta = RTA_NEXT(rta, rtalen);
+					}
+					if (rtalen) {
+						return false;
+					}
+					if (name.empty()) {
+						name = to_string(index);
+					}
+					interfaces[index] = std::make_pair(name, addr);
+				}
+			}
+		}
+		return true;
+	};
+	if (!get_interfaces()) {
+		close(fd);
+		return {};
+	}
+
+
+	std::vector<network_interface> out;
+	auto get_addresses = [&]() -> bool {
+
+		struct {
+			nlmsghdr hdr{};
+			ifaddrmsg info{};
+		} req{};
+
+		req.hdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
+		req.hdr.nlmsg_flags = NLM_F_REQUEST|NLM_F_DUMP;
+		req.hdr.nlmsg_type = RTM_GETADDR;
+		req.info.ifa_family = AF_UNSPEC;
+		req.info.ifa_scope = RT_SCOPE_UNIVERSE;
+
+		if (send(fd, &req, sizeof(req), MSG_NOSIGNAL) != sizeof(req)) {
+			return false;
+		}
+
+		size_t constexpr bufsize = 32*1024;
+		auto buf = std::make_unique<char[]>(bufsize);
+
+		iovec iov{buf.get(), bufsize};
+		msghdr msg{};
+		sockaddr_nl sa{};
+		msg.msg_name = &sa;
+		msg.msg_namelen = sizeof(sa);
+		msg.msg_iov = &iov;
+		msg.msg_iovlen = 1;
+
+		while (true) {
+			ssize_t r = recvmsg(fd, &msg, 0);
+			if (r <= 0) {
+				return false;
+			}
+
+			for (nlmsghdr *hdr = reinterpret_cast<nlmsghdr*>(buf.get()); NLMSG_OK(hdr, r); hdr = NLMSG_NEXT(hdr, r)) {
+				if (hdr->nlmsg_type == NLMSG_DONE) {
+					return true;
+				}
+				if (hdr->nlmsg_type == NLMSG_ERROR) {
+					return false;
+				}
+
+				if (hdr->nlmsg_type == RTM_NEWADDR) {
+					ifaddrmsg *ifa = reinterpret_cast<ifaddrmsg*>(NLMSG_DATA(hdr));
+
+					uint32_t flags = ifa->ifa_flags;
+
+					void* addr{};
+
+					rtattr* rta = IFA_RTA(ifa);
+					size_t rtalen = hdr->nlmsg_len - NLMSG_LENGTH(sizeof(ifaddrmsg));
+					while (RTA_OK(rta, rtalen)) {
+						switch(rta->rta_type) {
+							case IFA_ADDRESS:
+								addr = RTA_DATA(rta);
+								break;
+							case IFA_FLAGS: {
+								flags = *reinterpret_cast<uint32_t*>(RTA_DATA(rta));
+								break;
+							}
+							default:
+								break;
+						}
+						rta = RTA_NEXT(rta, rtalen);
+					}
+					if (rtalen) {
+						return false;
+					}
+
+					if (flags & IFA_F_TEMPORARY) {
+						continue;
+					}
+					if (!addr || (ifa->ifa_family != AF_INET && ifa->ifa_family != AF_INET6)) {
+						continue;
+					}
+
+					auto saddr = fz::socket_base::address_to_string(reinterpret_cast<char*>(addr), (ifa->ifa_family == AF_INET6) ? 16 : 4) + "/" + to_string(ifa->ifa_prefixlen);
+					auto & iface = interfaces[ifa->ifa_index];
+					if (iface.first.empty()) {
+						iface.first = to_string(ifa->ifa_index);
+					}
+
+					auto it = std::find_if(out.begin(), out.end(), [&](auto const& ni) { return ni.name == iface.first; });
+					if (it == out.cend()) {
+						it = out.emplace(it);
+						it->name = iface.first;
+						it->mac = iface.second;
+					}
+					it->addresses.emplace_back(std::move(saddr));
+				}
+			}
+		}
+	};
+	bool const success = get_addresses();
+	close(fd);
+	if (success) {
+		return out;
+	}
+#endif
+
+	return {};
+}
+
 }

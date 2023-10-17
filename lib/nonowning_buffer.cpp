@@ -69,4 +69,10 @@ void nonowning_buffer::append(uint8_t const* data, size_t len)
 		size_ += len;
 	}
 }
+
+std::string_view nonowning_buffer::to_view() const
+{
+	return std::string_view(reinterpret_cast<char const*>(get()), size());
+}
+
 }

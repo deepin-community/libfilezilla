@@ -113,4 +113,74 @@ std::vector<x509_certificate> load_certificates(std::string_view const& certdata
 	return certificates;
 }
 
+native_string check_certificate_status(std::string_view const& key, std::string_view const& certs, native_string const& password, bool pem)
+{
+	struct log_to_string: logger_interface
+	{
+		log_to_string(native_string &str)
+			: str_(str)
+		{
+			level_ = logmsg::error;
+		}
+
+		void do_log(logmsg::type, std::wstring && msg) override
+		{
+			if (!str_.empty())
+				str_.append(fzT("\n"));
+
+			str_.append(to_native(msg));
+		}
+
+	private:
+		native_string &str_;
+	};
+
+	native_string ret;
+	log_to_string logger(ret);
+
+	gnutls_certificate_credentials_t creds;
+	int res = gnutls_certificate_allocate_credentials(&creds);
+	if (res < 0) {
+		tls_layer_impl::log_gnutls_error(logger, res);
+		return ret;
+	}
+
+	gnutls_datum_t c;
+	c.data = const_cast<unsigned char*>(reinterpret_cast<unsigned char const*>(certs.data()));
+	c.size = unsigned(certs.size());
+
+	gnutls_datum_t k;
+	k.data = const_cast<unsigned char*>(reinterpret_cast<unsigned char const*>(key.data()));
+	k.size = unsigned(key.size());
+
+	res = gnutls_certificate_set_x509_key_mem2(creds, &c,
+		&k, pem ? GNUTLS_X509_FMT_PEM : GNUTLS_X509_FMT_DER, password.empty() ? nullptr : to_utf8(password).c_str(), 0);
+
+	gnutls_certificate_free_credentials(creds);
+
+	if (res < 0) {
+		tls_layer_impl::log_gnutls_error(logger, res);
+		return ret;
+	}
+
+	auto x059 = load_certificates(certs, pem, true, &logger);
+	if (x059.empty()) {
+		return ret;
+	}
+
+	auto now = datetime::now();
+
+	if (now < x059[0].get_activation_time()) {
+		tls_layer_impl::log_gnutls_error(logger, GNUTLS_E_NOT_YET_ACTIVATED);
+		return ret;
+	}
+
+	if (x059[0].get_expiration_time() < now) {
+		tls_layer_impl::log_gnutls_error(logger, GNUTLS_E_EXPIRED);
+		return ret;
+	}
+
+	return {};
+}
+
 }

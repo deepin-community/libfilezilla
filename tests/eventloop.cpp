@@ -125,15 +125,15 @@ public:
 			CPPUNIT_ASSERT(cond2_.wait(l, fz::duration::from_seconds(1)));
 		}
 
-		auto f = [&](fz::event_loop::Events::value_type& ev) -> bool {
-			if (ev.second->derived_type() == T1::type()) {
+		auto f = [&](fz::event_handler *&, fz::event_base& ev) -> bool {
+			if (ev.derived_type() == T1::type()) {
 				++c_;
 				return true;
 			}
 
-			if (ev.second->derived_type() == T2::type()) {
+			if (ev.derived_type() == T2::type()) {
 				++d_;
-				std::get<0>(static_cast<T2&>(*ev.second).v_) += 4;
+				std::get<0>(static_cast<T2&>(ev).v_) += 4;
 			}
 			return false;
 

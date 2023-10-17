@@ -1,4 +1,4 @@
-noinst_PROGRAMS = timer_fizzbuzz process nonblocking_process events list https
+noinst_PROGRAMS = timer_fizzbuzz process nonblocking_process events list https raw_https aio
 
 timer_fizzbuzz_SOURCES = timer_fizzbuzz.cpp
 
@@ -81,6 +81,35 @@ https_LDADD += $(libdeps)
 
 https_DEPENDENCIES = ../lib/libfilezilla.la
 
+
+raw_https_SOURCES = raw_https.cpp
+
+raw_https_CPPFLAGS = $(AM_CPPFLAGS)
+raw_https_CPPFLAGS += -I$(top_srcdir)/lib
+
+raw_https_LDFLAGS = $(AM_LDFLAGS)
+raw_https_LDFLAGS += -no-install
+
+raw_https_LDADD = ../lib/libfilezilla.la
+raw_https_LDADD += $(libdeps)
+
+raw_https_DEPENDENCIES = ../lib/libfilezilla.la
+
+
+aio_SOURCES = aio.cpp
+
+aio_CPPFLAGS = $(AM_CPPFLAGS)
+aio_CPPFLAGS += -I$(top_srcdir)/lib
+
+aio_LDFLAGS = $(AM_LDFLAGS)
+aio_LDFLAGS += -no-install
+
+aio_LDADD = ../lib/libfilezilla.la
+aio_LDADD += $(libdeps)
+
+aio_DEPENDENCIES = ../lib/libfilezilla.la
+
+
 if !FZ_WINDOWS
 noinst_PROGRAMS += impersonation
 
@@ -97,6 +126,21 @@ impersonation_LDADD += $(libdeps)
 
 impersonation_DEPENDENCIES = ../lib/libfilezilla.la
 endif
+
+noinst_PROGRAMS += xml_pp
+xml_pp_SOURCES = xml_pp.cpp
+
+xml_pp_CPPFLAGS = $(AM_CPPFLAGS)
+xml_pp_CPPFLAGS += -I$(top_srcdir)/lib
+
+xml_pp_LDFLAGS = $(AM_LDFLAGS)
+xml_pp_LDFLAGS += -no-install
+
+xml_pp_LDADD = ../lib/libfilezilla.la
+xml_pp_LDADD += $(libdeps)
+
+xml_pp_DEPENDENCIES = ../lib/libfilezilla.la
+
 
 dist_noinst_DATA = \
 	demo_events.vcxproj \

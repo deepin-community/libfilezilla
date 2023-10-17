@@ -21,6 +21,7 @@
 struct sockaddr;
 
 namespace fz {
+class buffer;
 class thread_pool;
 
 /** \brief The type of a socket event
@@ -174,7 +175,7 @@ public:
 	 */
 	int set_buffer_sizes(int size_receive, int size_send);
 
-	/// If connected, either ipv4 or ipv6, unknown otherwise
+	/// If connected, either ipv4, ipv6 or unix, unknown otherwise
 	address_type address_family() const;
 
 	/**
@@ -270,6 +271,20 @@ public:
 
 	explicit operator bool() const { return fd_ != -1; }
 
+	/**
+	 * \brief Returns remote address of a connected socket
+	 *
+	 * \return empty string on error
+	 */
+	std::string peer_ip(bool strip_zone_index = false) const;
+
+	/**
+	 * \brief Returns remote port of a connected socket
+	 *
+	 * \return -1 on error
+	 */
+	int peer_port(int& error) const;
+
 private:
 	socket_base::socket_t fd_{-1};
 };
@@ -292,6 +307,8 @@ public:
 	listen_socket(listen_socket const&) = delete;
 	listen_socket& operator=(listen_socket const&) = delete;
 
+	static std::unique_ptr<listen_socket> from_descriptor(socket_descriptor && desc, thread_pool & pool, int & error, fz::event_handler * handler = nullptr);
+
 	/**
 	 * \brief Starts listening
 	 *
@@ -299,14 +316,13 @@ public:
 	 *
 	 * The address type, if not fz::address_type::unknown, must may the type of the address passed to bind()
 	 */
-
 	int listen(address_type family, int port = 0);
 
 	/// Accepts incoming connection. If no socket is returned, error contains the reason
 	std::unique_ptr<socket> accept(int& error, fz::event_handler * handler = nullptr);
 
 	/**
-	 * \brief  Like accept, but only returns a socket descriptor.
+	 * \brief Like accept, but only returns a socket descriptor.
 	 *
 	 * Best suited for tight accept loops where the descriptor is handed
 	 * off to other threads.
@@ -401,7 +417,7 @@ public:
 		}
 		return write(buffer, static_cast<unsigned int>(size), error);
 	}
-	
+
 	virtual void set_event_handler(event_handler* pEvtHandler, fz::socket_event_flag retrigger_block = fz::socket_event_flag{}) = 0;
 
 	virtual native_string peer_host() const = 0;
@@ -510,20 +526,20 @@ public:
 	virtual int write(void const* buffer, unsigned int size, int& error) override;
 
 	/**
-	* \brief Returns remote address of a connected socket
-	*
-	* \return empty string on error
-	*/
+	 * \brief Returns remote address of a connected socket
+	 *
+	 * \return empty string on error
+	 */
 	std::string peer_ip(bool strip_zone_index = false) const;
 
 	/// Returns the hostname passed to connect()
 	virtual native_string peer_host() const override;
 
 	/**
-	* \brief Returns remote port of a connected socket
-	*
-	* \return -1 on error
-	*/
+	 * \brief Returns remote port of a connected socket
+	 *
+	 * \return -1 on error
+	 */
 	virtual int peer_port(int& error) const override;
 
 	/**
@@ -577,6 +593,36 @@ public:
 	virtual int shutdown_read() override { return 0; }
 
 	socket_t get_descriptor();
+
+#ifndef FZ_WINDOWS
+	/** Sends file descriptors over a Unix Domain Socket.
+	 *
+	 * fd may be -1.
+	 * If fd is not -1, the buffer must not be empty.
+	 *
+	 * Returns the amount of bytes sent, which may be less than requested, or -1 on error.
+	 *
+	 * If any bytes got sent then the descriptor has been sent as well.
+	 *
+	 * If having sent an fd, you should not send any other fd until the buffer has been completely
+	 * sent.
+	 *
+	 * The data you sent should be structured such that the receiving end can detect which
+	 * parts of data in the stream have a descriptor associated with it.
+	 */
+	int send_fd(fz::buffer & buf, int fd, int & error);
+
+	/** Reads data and file descriptors from a Unix Domain Socket
+	 *
+	 * Appends any read data to the buffer, returns the number of bytes added.
+	 *
+	 * Returns 0 on EOF, -1 on error.
+	 *
+	 * If a descriptor got read, it is returned in the fd argument. If no descriptor got read,
+	 * fd is set to -1.
+	 */
+	int read_fd(fz::buffer & buf, int &fd, int & error);
+#endif
 
 private:
 	friend class socket_base;
@@ -711,6 +757,17 @@ native_string FZ_PUBLIC_SYMBOL socket_error_description(int error);
 
 
 #ifdef FZ_WINDOWS
+
+/// \private
+class FZ_PRIVATE_SYMBOL winsock_initializer final
+{
+public:
+	winsock_initializer();
+	~winsock_initializer();
+
+private:
+	bool initialized_{};
+};
 
 #ifndef EISCONN
 #define EISCONN WSAEISCONN

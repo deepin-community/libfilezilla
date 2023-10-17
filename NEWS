@@ -1,3 +1,86 @@
+0.44.0 (2023-06-28)
+
++ Exportable hash accumulator state
++ Add for RSA key support for JWS
++ JWT creation
++ Conversion functions from X.509 private keys to JWK
+- Added logging when certificate is untrusted by system trust store
+
+0.43.0 (2023-05-26)
+
++ Added fz::tls_layer::generate_cert_from_csr
+- fz::event_loop performance improvements when timers are in use
+
+0.42.2 (2023-04-25)
+
+- Further HTTP client fixes
+
+0.42.1 (2023-04-21)
+
+- Small HTTP client improvements to force IPv4/IPv6 for new connections, add a header count limit, and to make a buffer pool optional
+
+0.42.0 (2023-04-12)
+
++ Added an HTTP client
+- Sources are now distributed in a .tar.xz
+- buffer_writer now clears the buffer when opened
+- Fixes and performance improvements for fz::xml::parser
+- *nix: fz::file::size() now returns -1 on character devices
+
+0.41.1 (2023-02-22)
+
+- Fixed a crash signalling aio waiters
+- Added listen_socket::from_descriptor
+
+0.41.0 (2023-01-12)
+
++ Added fz::xml::parser and fz::xml::namespace_parser
++ Added fz::is_valid_utf8
++ Added fz::utf16le_to_utf8_append and fz::utf16be_to_utf8_append
+
+0.40.0 (2022-12-12)
+
++ Added fz::unicode_codepoint_to_utf8_append
++ Added fz::strtokenizer
++ Added fz::check_certificate_status
+
+0.39.2 (2022-10-11)
+
+- Fixed removing aio_waiters/event_handlers from aio_waitable
+- Fixed start offset in view_reader
+- Fix buffer_writer not releasing added buffers
+
+0.39.1 (2022-09-12)
+
+- MSW: Fixed a possible hang in fz::process:kill
+
+0.39.0 (2022-09-05)
+
++ Added readwrite mode to fz::file.
++ MSW: Added fz::dll and fz::shdlls glue
++ Added fz::ascii_layer
+- *nix: Fixed mmap error handling in fz::aio_buffer_pool
+- Fixed a potential deadlock in the aio code
+- Fixed an issue with calling conventions on 32bit Windows
+- MSW: fz::datetime::get_tm now works for dates past Y2K38 on toolchains with 32bit time_t
+- MSW: Fixed an error reading from fz::process
+
+0.38.1 (2022-07-20)
+
++ fz::aio_waitable now also accepts event handlers in addition to aio_waiter
+- Split fz::process::kill into separate stop and kill functions
+
+0.38.0 (2022-07-08)
+
++ Added readers and writers for asynchronous disk I/O operating on a buffer pool
++ Added fz::current_username()
++ Added fz::event_handler::stop_add_timer
++ Added overload for fz::event_handler::add_timer that takes a deadline
++ Added fz::file::set_modification_time
++ Added fz::get_network_interfaces
++ *nix: fz::socket can now accept Unix-domain sockets, added fz::socket::send_fd and fz::socke::read_fd
+- *nix: When impersonating, limit supplementary groups to NGROUPS_MAX
+
 0.37.2 (2022-04-29)
 
 + Added a null_logger that doesn't do anything

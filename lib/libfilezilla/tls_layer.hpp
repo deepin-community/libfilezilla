@@ -36,7 +36,10 @@ enum class tls_server_flags : unsigned int
 	none = 0,
 
 	/// In TLS 1.3, do not automatically send PSKs after finishing handshake. Ignored if not TLS 1.3
-	no_auto_ticket = 0x1
+	no_auto_ticket = 0x1,
+
+	/// Used in unit tests. Don't use in production.
+	debug_no_tickets = 0x2
 };
 
 inline bool operator&(tls_server_flags lhs, tls_server_flags rhs) {
@@ -45,6 +48,31 @@ inline bool operator&(tls_server_flags lhs, tls_server_flags rhs) {
 inline tls_server_flags operator|(tls_server_flags lhs, tls_server_flags rhs) {
 	return static_cast<tls_server_flags>(static_cast<std::underlying_type_t<tls_server_flags>>(lhs) | static_cast<std::underlying_type_t<tls_server_flags>>(rhs));
 }
+inline tls_server_flags& operator|=(tls_server_flags & lhs, tls_server_flags rhs) {
+	lhs = lhs | rhs;
+	return lhs;
+}
+
+
+enum class tls_client_flags : unsigned int
+{
+	none = 0,
+
+	/// Used in unit tests. Don't use in production.
+	debug_no_tickets = 0x1
+};
+
+inline bool operator&(tls_client_flags lhs, tls_client_flags rhs) {
+	return (static_cast<std::underlying_type_t<tls_client_flags>>(lhs) & static_cast<std::underlying_type_t<tls_client_flags>>(rhs)) != 0;
+}
+inline tls_client_flags operator|(tls_client_flags lhs, tls_client_flags rhs) {
+	return static_cast<tls_client_flags>(static_cast<std::underlying_type_t<tls_client_flags>>(lhs) | static_cast<std::underlying_type_t<tls_client_flags>>(rhs));
+}
+inline tls_client_flags& operator|=(tls_client_flags & lhs, tls_client_flags rhs) {
+	lhs = lhs | rhs;
+	return lhs;
+}
+
 
 
 /**
@@ -76,7 +104,7 @@ public:
 	 * must match the passed \c required_certificate, either in DER or PEM,
 	 * or the handshake will fail.
 	 */
-	bool client_handshake(std::vector<uint8_t> const& required_certificate, std::vector<uint8_t> const& session_to_resume = std::vector<uint8_t>(), native_string const& session_hostname = native_string());
+	bool client_handshake(std::vector<uint8_t> const& required_certificate, std::vector<uint8_t> const& session_to_resume = std::vector<uint8_t>(), native_string const& session_hostname = native_string(), tls_client_flags flags = {});
 
 	/**
 	 * \brief Starts shaking hands for a new TLS session as client.
@@ -94,7 +122,7 @@ public:
 	 * The handler is called even for certificates not trusted by the system trust store, allowing
 	 * the following impairments: Unknown issuer, wrong hostname and certificates used outside their validity time.
 	 */
-	bool client_handshake(event_handler *const verification_handler, std::vector<uint8_t> const& session_to_resume = std::vector<uint8_t>(), native_string const& session_hostname = native_string());
+	bool client_handshake(event_handler *const verification_handler, std::vector<uint8_t> const& session_to_resume = std::vector<uint8_t>(), native_string const& session_hostname = native_string(), tls_client_flags flags = {});
 
 	/**
 	 * \brief Starts shaking hand for a new TLS session as server.
@@ -162,6 +190,14 @@ public:
 	/// Returns the version of the loaded GnuTLS library, may be different than the version used at compile-time.
 	static std::string get_gnutls_version();
 
+	/// Type of certificate to create.
+	enum class cert_type {
+		any, /// Except ca. Includes, but is not limited to, client and server.
+		client,
+		server,
+		ca
+	};
+
 	/** \brief Creates a new private key and a self-signed certificate.
 	 *
 	 * The distinguished name must be a RFC4514-compliant string.
@@ -170,8 +206,20 @@ public:
 	 *
 	 * The output pair is in PEM, first element is the key and the second the certificate.
 	 */
-	static std::pair<std::string, std::string> generate_selfsigned_certificate(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames);
-	static std::pair<std::string, std::string> generate_csr(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, bool csr_as_pem = true);
+	static std::pair<std::string, std::string> generate_selfsigned_certificate(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, cert_type type = cert_type::any, bool ecsda = true);
+
+	/// Creates CA certificate.
+	static std::pair<std::string, std::string> generate_ca_certificate(native_string const& password, std::string const& distinguished_name, duration const& lifetime = {}, bool ecdsa = true);
+
+	/// Creates a CSR
+	static std::pair<std::string, std::string> generate_csr(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, bool csr_as_pem = true, cert_type type = cert_type::any);
+
+	/**
+	 * /brief Creates a certificate from a CSR.
+	 *
+	 * If DN and hostnames are not given, the DN/hostnames from the CSR are taken.
+	 */
+	static std::string generate_cert_from_csr(std::pair<std::string, std::string> const& issuer, native_string const& password, std::string const& csr, std::string const& distinguished_name = {}, std::vector<std::string> const& hostnames = {}, duration const& lifetime = {}, cert_type type = cert_type::any);
 
 	/** \brief Negotiate application protocol
 	 *

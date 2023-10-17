@@ -15,6 +15,7 @@ typedef std::make_signed_t<size_t> ssize_t;
 #include "libfilezilla/tls_layer.hpp"
 
 #include <optional>
+#include <string_view>
 
 namespace fz {
 class tls_system_trust_store;
@@ -44,7 +45,7 @@ public:
 	tls_layer_impl(tls_layer& layer, tls_system_trust_store * systemTrustStore, logger_interface & logger);
 	~tls_layer_impl();
 
-	bool client_handshake(std::vector<uint8_t> const& session_to_resume, native_string const& session_hostname, std::vector<uint8_t> const& required_certificate, event_handler * verification_handler);
+	bool client_handshake(std::vector<uint8_t> const& session_to_resume, native_string const& session_hostname, std::vector<uint8_t> const& required_certificate, event_handler * verification_handler, tls_client_flags flags);
 
 	bool server_handshake(std::vector<uint8_t> const& session_to_resume, std::string_view const& preamble, tls_server_flags flags);
 
@@ -83,8 +84,10 @@ public:
 	ssize_t push_function(void const* data, size_t len);
 	ssize_t pull_function(void* data, size_t len);
 
-	static std::pair<std::string, std::string> generate_selfsigned_certificate(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames);
-	static std::pair<std::string, std::string> generate_csr(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, bool csr_as_pem);
+	static std::pair<std::string, std::string> generate_selfsigned_certificate(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, duration const& lifetime, tls_layer::cert_type type, bool ecdsa);
+	static std::pair<std::string, std::string> generate_csr(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, bool csr_as_pem, tls_layer::cert_type type);
+
+	static std::string generate_cert_from_csr(std::pair<std::string, std::string> const& issuer, native_string const& password, std::string const& csr, std::string const& distinguished_name, std::vector<std::string> const& hostnames, duration const& lifetime, tls_layer::cert_type type);
 
 	int shutdown_read();
 
@@ -95,6 +98,7 @@ public:
 
 	static int load_certificates(std::string_view const& in, bool pem, gnutls_x509_crt_t *& certs, unsigned int & certs_size, bool & sort);
 	static bool extract_cert(gnutls_x509_crt_t const& cert, x509_certificate& out, bool last, logger_interface * logger);
+	static void log_gnutls_error(logger_interface &logger, int code, std::wstring_view const& function = {}, logmsg::type logLevel = logmsg::error);
 
 	void set_min_tls_ver(tls_ver ver);
 	void set_max_tls_ver(tls_ver ver);
@@ -116,11 +120,11 @@ private:
 	bool certificate_is_blacklisted(cert_list_holder const& certificates);
 	bool certificate_is_blacklisted(gnutls_x509_crt_t const& cert);
 
-	void log_error(int code, std::wstring const& function, logmsg::type logLevel = logmsg::error);
+	void log_error(int code, std::wstring_view const& function, logmsg::type logLevel = logmsg::error);
 	void log_alert(logmsg::type logLevel);
 
 	// Failure logs the error, uninits the session and sends a close event
-	void failure(int code, bool send_close, std::wstring const& function = std::wstring());
+	void failure(int code, bool send_close, std::wstring_view const& function = {});
 
 	int do_call_gnutls_record_recv(void* data, size_t len);
 

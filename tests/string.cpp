@@ -2,6 +2,9 @@
 #include "../lib/libfilezilla/string.hpp"
 
 #include "test_utils.hpp"
+
+using namespace std::literals;
+
 /*
  * This testsuite asserts the correctness of the
  * string functions
@@ -19,6 +22,8 @@ class string_test final : public CppUnit::TestFixture
 	CPPUNIT_TEST(test_strtok);
 	CPPUNIT_TEST(test_startsendswith);
 	CPPUNIT_TEST(test_normalize_hyphens);
+	CPPUNIT_TEST(test_is_valid_utf8);
+	CPPUNIT_TEST(test_utf16_to_utf8_append);
 	CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -34,6 +39,8 @@ public:
 	void test_strtok();
 	void test_startsendswith();
 	void test_normalize_hyphens();
+	void test_is_valid_utf8();
+	void test_utf16_to_utf8_append();
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(string_test);
@@ -236,4 +243,88 @@ void string_test::test_normalize_hyphens()
 {
 	CPPUNIT_ASSERT_EQUAL(std::string("--------"), fz::normalize_hyphens(fz::percent_decode_s("-" "%e2%80%90" "%e2%80%91" "%e2%80%92" "%e2%80%93" "%e2%80%94" "%e2%80%95" "%e2%88%92")));
 	ASSERT_EQUAL(std::wstring(L"--------"), fz::normalize_hyphens(fz::to_wstring_from_utf8(fz::percent_decode_s("-" "%e2%80%90" "%e2%80%91" "%e2%80%92" "%e2%80%93" "%e2%80%94" "%e2%80%95" "%e2%88%92"))));
+}
+
+void string_test::test_is_valid_utf8()
+{
+	auto const utf8 = "Das bl\xc3\xb6" "de SCHEI\xe1\xba\x9e" "EMOJI \xf0\x9f\x92\xa9, ein Haufen Mist."sv;
+	size_t state{};
+	CPPUNIT_ASSERT(fz::is_valid_utf8(utf8, state));
+	CPPUNIT_ASSERT_EQUAL(size_t(0), state);
+
+	for (size_t i = 0; i < utf8.size(); ++i) {
+		CPPUNIT_ASSERT(fz::is_valid_utf8(utf8.substr(i, 1), state));
+	}
+	CPPUNIT_ASSERT_EQUAL(size_t(0), state);
+
+	auto const valid1 = "\xed\x9f\xbf"sv; // Technically undefined, but valid. Just before surrogates
+	auto const valid2 = "\xee\x80\x80"sv; // Private use area. Just after surrogates
+	CPPUNIT_ASSERT(fz::is_valid_utf8(valid1));
+	CPPUNIT_ASSERT(fz::is_valid_utf8(valid2));
+
+	auto const invalid1 = "\xc3\xc3"sv; // Two starting bytes
+	auto const invalid2 = "\xed\xa0\x80"sv; // Surrogate
+	auto const invalid3 = "\xed\xbf\xbf"sv; // Surrogate
+	CPPUNIT_ASSERT(!fz::is_valid_utf8(invalid1));
+	CPPUNIT_ASSERT(!fz::is_valid_utf8(invalid2));
+	CPPUNIT_ASSERT(!fz::is_valid_utf8(invalid3));
+}
+
+namespace {
+void do_test_utf16_to_utf8_append(std::string_view be, std::string_view expected)
+{
+	CPPUNIT_ASSERT(!(be.size() % 2));
+	std::string le;
+	le.resize(be.size());
+	for (size_t i = 0; i < be.size(); i += 2) {
+		le[i] = be[i+1];
+		le[i+1] = be[i];
+	}
+
+	std::string out;
+	uint32_t state{};
+	CPPUNIT_ASSERT(fz::utf16be_to_utf8_append(out, be, state));
+	CPPUNIT_ASSERT_EQUAL(uint32_t(0), state);
+	CPPUNIT_ASSERT(expected == out);
+	out.clear();
+	CPPUNIT_ASSERT(fz::utf16le_to_utf8_append(out, le, state));
+	CPPUNIT_ASSERT_EQUAL(uint32_t(0), state);
+	CPPUNIT_ASSERT(expected == out);
+	out.clear();
+
+	for (size_t i = 0; i < be.size(); ++i) {
+		CPPUNIT_ASSERT(fz::utf16be_to_utf8_append(out, be.substr(i, 1), state));
+	}
+	CPPUNIT_ASSERT_EQUAL(uint32_t(0), state);
+	CPPUNIT_ASSERT(expected == out);
+	out.clear();
+	for (size_t i = 0; i < le.size(); ++i) {
+		CPPUNIT_ASSERT(fz::utf16le_to_utf8_append(out, le.substr(i, 1), state));
+	}
+	CPPUNIT_ASSERT_EQUAL(uint32_t(0), state);
+	CPPUNIT_ASSERT(expected == out);
+	out.clear();
+}
+}
+
+void string_test::test_utf16_to_utf8_append()
+{
+	// Big-endian
+	auto const poop = "\xd8\x3d\xdc\xa9"sv;
+	auto const cheese = "\0K\0\xe4\0s\0e"sv;
+
+	auto const poop_utf8 = "\xf0\x9f\x92\xa9"sv;
+	auto const cheese_utf8 = "K\xc3\xa4se"sv;
+	do_test_utf16_to_utf8_append(poop, poop_utf8);
+	do_test_utf16_to_utf8_append(cheese, cheese_utf8);
+
+	{
+		std::string out;
+		uint32_t state{};
+		CPPUNIT_ASSERT(fz::utf16be_to_utf8_append(out, poop.substr(0, 2), state));
+		CPPUNIT_ASSERT(state != 0);
+		CPPUNIT_ASSERT(!fz::utf16be_to_utf8_append(out, cheese.substr(0, 2), state));
+		state = 0;
+		CPPUNIT_ASSERT(!fz::utf16be_to_utf8_append(out, poop.substr(2), state));
+	}
 }

@@ -7,6 +7,7 @@
 
 #include "test_utils.hpp"
 
+#include <optional>
 #include <string.h>
 
 class socket_test final : public CppUnit::TestFixture
@@ -24,6 +25,7 @@ public:
 	void test_duplex();
 	void test_duplex_tls();
 
+	void do_test_tls_resumption(std::optional<fz::tls_ver> ver, bool server_no_ticket, bool client_no_ticket);
 	void test_tls_resumption();
 };
 
@@ -44,9 +46,10 @@ auto const& get_key_and_cert()
 
 struct base : public fz::event_handler
 {
-	base(fz::event_loop & loop, std::vector<uint8_t> const& tls_session_parameters)
+	base(fz::event_loop & loop, std::vector<uint8_t> const& tls_session_parameters, std::optional<fz::tls_ver> ver = {})
 		: fz::event_handler(loop)
 		, tls_session_parameters_(tls_session_parameters)
+		, tls_ver_(ver)
 	{
 	}
 
@@ -178,6 +181,7 @@ struct base : public fz::event_handler
 	bool shut_{};
 	bool handshake_only_{};
 	std::vector<uint8_t> tls_session_parameters_;
+	std::optional<fz::tls_ver> tls_ver_;
 	int64_t sent_{};
 	int64_t received_{};
 	fz::monotonic_clock start_{fz::monotonic_clock::now()};
@@ -187,14 +191,22 @@ struct base : public fz::event_handler
 
 struct client final : public base
 {
-	client(fz::event_loop & loop, bool tls = false, std::vector<uint8_t> const& tls_session_parameters = {})
-		: base(loop, tls_session_parameters)
+	client(fz::event_loop & loop, bool tls = false, std::vector<uint8_t> const& tls_session_parameters = {}, std::optional<fz::tls_ver> ver = {}, bool no_tickets = false)
+		: base(loop, tls_session_parameters, ver)
 	{
 		s_ = std::make_unique<fz::socket>(pool_, this);
 		if (tls) {
 			tls_ = std::make_unique<fz::tls_layer>(loop, this, *s_, nullptr, logger_);
+			if (tls_ver_) {
+				tls_->set_min_tls_ver(*tls_ver_);
+				tls_->set_max_tls_ver(*tls_ver_);
+			}
 			auto const& cert = get_key_and_cert().second;
-			if (!tls_->client_handshake(std::vector<uint8_t>(cert.cbegin(), cert.cend()), tls_session_parameters_)) {
+			fz::tls_client_flags flags{};
+			if (no_tickets) {
+				flags |= fz::tls_client_flags::debug_no_tickets;
+			}
+			if (!tls_->client_handshake(std::vector<uint8_t>(cert.cbegin(), cert.cend()), tls_session_parameters_, {}, flags)) {
 				fail(__LINE__);
 			}
 			si_ = tls_.get();
@@ -220,9 +232,10 @@ struct client final : public base
 
 struct server final : public base
 {
-	server(fz::event_loop & loop, bool tls = false, std::vector<uint8_t> const& tls_session_parameters = {})
-		: base(loop, tls_session_parameters)
+	server(fz::event_loop & loop, bool tls = false, std::vector<uint8_t> const& tls_session_parameters = {}, std::optional<fz::tls_ver> ver = {}, bool no_tickets = false)
+		: base(loop, tls_session_parameters, ver)
 		, use_tls_(tls)
+		, no_tickets_(no_tickets)
 	{
 		l_.bind("127.0.0.1");
 		int res = l_.listen(fz::address_type::ipv4);
@@ -256,9 +269,17 @@ struct server final : public base
 				}
 				if (use_tls_) {
 					tls_ = std::make_unique<fz::tls_layer>(event_loop_, this, *s_, nullptr, logger_);
+					if (tls_ver_) {
+						tls_->set_min_tls_ver(*tls_ver_);
+						tls_->set_max_tls_ver(*tls_ver_);
+					}
 					tls_->set_certificate(get_key_and_cert().first, get_key_and_cert().second, fz::native_string());
 					si_ = tls_.get();
-					if (!tls_->server_handshake(tls_session_parameters_)) {
+					fz::tls_server_flags flags{};
+					if (no_tickets_) {
+						flags |= fz::tls_server_flags::debug_no_tickets;
+					}
+					if (!tls_->server_handshake(tls_session_parameters_, {}, flags)) {
 						fail(__LINE__);
 					}
 				}
@@ -275,6 +296,7 @@ struct server final : public base
 
 	fz::listen_socket l_{pool_, this};
 	bool use_tls_{};
+	bool no_tickets_{};
 };
 }
 
@@ -353,7 +375,7 @@ void socket_test::test_duplex_tls()
 	CPPUNIT_ASSERT(s.sent_hash_.digest() == c.received_hash_.digest());
 }
 
-void socket_test::test_tls_resumption()
+void socket_test::do_test_tls_resumption(std::optional<fz::tls_ver> ver, bool server_no_ticket, bool client_no_ticket)
 {
 	std::vector<uint8_t> server_parameters;
 	std::vector<uint8_t> client_parameters;
@@ -363,7 +385,7 @@ void socket_test::test_tls_resumption()
 		CPPUNIT_ASSERT(!get_key_and_cert().second.empty());
 
 		fz::event_loop server_loop;
-		server s(server_loop, true, server_parameters);
+		server s(server_loop, true, server_parameters, ver, server_no_ticket);
 		s.handshake_only_ = true;
 
 		int error;
@@ -374,7 +396,7 @@ void socket_test::test_tls_resumption()
 		CPPUNIT_ASSERT(!ip.empty());
 
 		fz::event_loop client_loop;
-		client c(client_loop, true, client_parameters);
+		client c(client_loop, true, client_parameters, ver, client_no_ticket);
 		c.handshake_only_ = true;
 
 		CPPUNIT_ASSERT(!c.si_->connect(ip, port));
@@ -395,5 +417,20 @@ void socket_test::test_tls_resumption()
 		server_parameters = s.tls_session_parameters_;
 		CPPUNIT_ASSERT(client_parameters.size() > 10);
 		CPPUNIT_ASSERT(server_parameters.size() > 10);
+	}
+}
+
+void socket_test::test_tls_resumption()
+{
+	do_test_tls_resumption({}, false, false);
+
+	// 1.3 alwas uses tickets for resumption
+	do_test_tls_resumption(fz::tls_ver::v1_3, false, false);
+
+	// Test all posssible combinations of TLS <= 1.2 and either side supporting tickets
+	for (size_t i = 0; i < 4; ++i) {
+		do_test_tls_resumption(fz::tls_ver::v1_2, i & 0x1, i & 0x2);
+		do_test_tls_resumption(fz::tls_ver::v1_1, i & 0x1, i & 0x2);
+		do_test_tls_resumption(fz::tls_ver::v1_0, i & 0x1, i & 0x2);
 	}
 }

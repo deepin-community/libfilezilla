@@ -4,7 +4,7 @@
 #include "libfilezilla/file.hpp"
 
 #ifdef FZ_WINDOWS
-#include "windows/dll.hpp"
+#include "libfilezilla/glue/dll.hpp"
 #include "windows/security_descriptor_builder.hpp"
 #include <winternl.h>
 #else
@@ -517,7 +517,7 @@ typedef NTSTATUS(NTAPI* lfzNtOpenFile)(HANDLE* file, ACCESS_MASK DesiredAccess, 
 bool read_dir_buffer(HANDLE dir, void* buf, ULONG size, lfzFILE_INFORMATION_CLASS c)
 {
 	static dll ntdll(L"ntdll.dll", LOAD_LIBRARY_SEARCH_SYSTEM32);
-	static lfzNtQueryDirectoryFile f = ntdll.h_ ? reinterpret_cast<lfzNtQueryDirectoryFile>(GetProcAddress(ntdll.h_, "NtQueryDirectoryFile")) : nullptr;
+	static auto f = reinterpret_cast<lfzNtQueryDirectoryFile>(ntdll["NtQueryDirectoryFile"]);
 	if (!f) {
 		return false;
 	}
@@ -532,14 +532,18 @@ bool read_dir_buffer(HANDLE dir, void* buf, ULONG size, lfzFILE_INFORMATION_CLAS
 HANDLE OpenAt(HANDLE dir, std::wstring const& name, ACCESS_MASK DesiredAccess, ULONG ShareAccess, ULONG OpenOptions)
 {
 	static dll ntdll(L"ntdll.dll", LOAD_LIBRARY_SEARCH_SYSTEM32);
-	static lfzNtOpenFile const func = ntdll.h_ ? reinterpret_cast<lfzNtOpenFile>(GetProcAddress(ntdll.h_, "NtOpenFile")) : nullptr;
+	static auto const func = reinterpret_cast<lfzNtOpenFile>(ntdll["NtOpenFile"]);
 	if (!func) {
 		return INVALID_HANDLE_VALUE;
 	}
 
+	if ((name.size() * 2 + 2) > std::numeric_limits<decltype(UNICODE_STRING::Length)>::max()) {
+		return INVALID_HANDLE_VALUE;
+	}
+
 	UNICODE_STRING uname;
-	uname.Length = name.size() * 2;
-	uname.MaximumLength = name.size() * 2 + 2;
+	uname.Length = static_cast<decltype(UNICODE_STRING::Length)>(name.size() * 2);
+	uname.MaximumLength = static_cast<decltype(UNICODE_STRING::Length)>(name.size() * 2 + 2);
 	uname.Buffer = const_cast<wchar_t*>(name.c_str());
 
 	OBJECT_ATTRIBUTES attrs{};
@@ -579,7 +583,7 @@ bool local_filesys::check_buffer()
 {
 	if (!cur_) {
 		cur_ = buffer_.data();
-		if (!read_dir_buffer(dir_, cur_, buffer_.size(), lfzFileDirectoryInformation)) {
+		if (!read_dir_buffer(dir_, cur_, static_cast<ULONG>(buffer_.size()), lfzFileDirectoryInformation)) {
 			return false;
 		}
 	}
@@ -694,7 +698,7 @@ bool local_filesys::get_next_file(native_string& name, bool &is_link, local_file
 		is_link = (data.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 && IsNameSurrogateReparsePoint(dir_, name);
 		if (is_link && query_symlink_targets_) {
 			// Follow the reparse point
-			HANDLE hFile = OpenAt(dir_, name, FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN_FOR_BACKUP_INTENT); 
+			HANDLE hFile = OpenAt(dir_, name, FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN_FOR_BACKUP_INTENT);
 			if (hFile != INVALID_HANDLE_VALUE) {
 				BY_HANDLE_FILE_INFORMATION info{};
 				int ret = GetFileInformationByHandle(hFile, &info);
@@ -931,7 +935,7 @@ result do_mkdir(native_string const& path, mkdir_permissions permissions)
 		}
 		attr.lpSecurityDescriptor = sd;
 	}
-	
+
 	if (CreateDirectory(path.c_str(), &attr)) {
 		return {result::ok};
 	}
@@ -1250,7 +1254,7 @@ result rename_file(native_string const& source, native_string const& dest, bool 
 #endif
 }
 
-local_filesys::local_filesys(local_filesys && op)
+local_filesys::local_filesys(local_filesys && op) noexcept
 {
 #if FZ_WINDOWS
 	uintptr_t offset{};
@@ -1275,7 +1279,7 @@ local_filesys::local_filesys(local_filesys && op)
 	query_symlink_targets_ = op.query_symlink_targets_;
 }
 
-local_filesys& local_filesys::operator=(local_filesys && op)
+local_filesys& local_filesys::operator=(local_filesys && op) noexcept
 {
 	if (&op != this) {
 		end_find_files();

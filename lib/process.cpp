@@ -2,12 +2,12 @@
 #include "libfilezilla/impersonation.hpp"
 #include "libfilezilla/process.hpp"
 #include "libfilezilla/thread_pool.hpp"
+#include "libfilezilla/util.hpp"
 
 #ifdef FZ_WINDOWS
 
 #include "libfilezilla/buffer.hpp"
 #include "libfilezilla/encode.hpp"
-#include "libfilezilla/util.hpp"
 #include "libfilezilla/glue/windows.hpp"
 #include "windows/security_descriptor_builder.hpp"
 
@@ -225,15 +225,17 @@ public:
 							if (res || err == ERROR_IO_PENDING) {
 								continue;
 							}
+							in_.reset();
 							write_buffer_.clear();
 							write_error_ = rwresult{ rwresult::other, err };
 						}
 					}
 					else {
 						DWORD err = GetLastError();
-						if (err == ERROR_IO_PENDING) {
+						if (err == ERROR_IO_PENDING || err == ERROR_IO_INCOMPLETE) {
 							continue;
 						}
+						in_.reset();
 						write_buffer_.clear();
 						write_error_ = rwresult{ rwresult::other, err };
 					}
@@ -369,20 +371,29 @@ public:
 			return;
 		}
 
-		auto process_event_filter = [&](event_loop::Events::value_type const& ev) -> bool {
-			if (ev.first != handler_) {
-				return false;
-			}
-			else if (ev.second->derived_type() == process_event::type()) {
-				return std::get<0>(static_cast<process_event const&>(*ev.second).v_) == &process_;
+		auto process_event_filter = [&](event_base const& ev) -> bool {
+			if (ev.derived_type() == process_event::type()) {
+				return std::get<0>(static_cast<process_event const&>(ev).v_) == &process_;
 			}
 			return false;
 		};
 
-		handler_->event_loop_.filter_events(process_event_filter);
+		handler_->filter_events(process_event_filter);
 	}
 
-	bool kill(bool wait = true, bool force = false)
+	template<typename Out, typename In>
+	constexpr Out clamped_cast(In in) noexcept
+	{
+		if (cmp_less(in, std::numeric_limits<Out>::min())) {
+			return std::numeric_limits<Out>::min();
+		}
+		if (cmp_less(std::numeric_limits<Out>::max(), in)) {
+			return std::numeric_limits<Out>::max();
+		}
+		return static_cast<Out>(in);
+	}
+
+	bool kill(bool force = true, duration const& timeout = {})
 	{
 		if (handler_) {
 			{
@@ -396,16 +407,16 @@ public:
 			quit_ = false;
 
 			if (out_.read_ != INVALID_HANDLE_VALUE) {
-				CancelIo(out_.read_);
+				CancelIoEx(out_.read_, &ol_read_);
 				DWORD read{};
-				while (!GetOverlappedResult(out_.read_, &ol_read_, &read, false) && GetLastError() == ERROR_IO_PENDING) {
+				while (!GetOverlappedResult(out_.read_, &ol_read_, &read, false) && (GetLastError() == ERROR_IO_PENDING || GetLastError() == ERROR_IO_INCOMPLETE)) {
 					yield();
 				}
 			}
 			if (in_.write_ != INVALID_HANDLE_VALUE) {
-				CancelIo(in_.write_);
+				CancelIoEx(in_.write_, &ol_write_);
 				DWORD written{};
-				while (!GetOverlappedResult(in_.write_, &ol_write_, &written, false) && GetLastError() == ERROR_IO_PENDING) {
+				while (!GetOverlappedResult(in_.write_, &ol_write_, &written, false) && (GetLastError() == ERROR_IO_PENDING || GetLastError() == ERROR_IO_INCOMPLETE)) {
 					yield();
 				}
 			}
@@ -423,7 +434,8 @@ public:
 				TerminateProcess(process_handle_, 0);
 			}
 			else {
-				if (WaitForSingleObject(process_handle_, wait ? INFINITE : 0) == WAIT_TIMEOUT) {
+				DWORD wait = (timeout >= duration()) ? clamped_cast<DWORD>(timeout.get_milliseconds()) : INFINITE;
+				if (WaitForSingleObject(process_handle_, wait) == WAIT_TIMEOUT) {
 					return false;
 				}
 			}
@@ -461,18 +473,6 @@ public:
 		}
 	}
 
-	template<typename Out, typename In>
-	constexpr Out clamped_cast(In in) noexcept
-	{
-		if (cmp_less(in, std::numeric_limits<Out>::min())) {
-			return std::numeric_limits<Out>::min();
-		}
-		if (cmp_less(std::numeric_limits<Out>::max(), in)) {
-			return std::numeric_limits<Out>::max();
-		}
-		return static_cast<Out>(in);
-	}
-
 	rwresult read(void* buffer, size_t len)
 	{
 		if (!len || out_.read_ == INVALID_HANDLE_VALUE) {
@@ -494,8 +494,6 @@ public:
 							if (err != ERROR_IO_PENDING) {
 								return rwresult{ rwresult::other, err };
 							}
-							waiting_read_ = true;
-							SetEvent(sync_);
 						}
 					}
 					return rwresult(len);
@@ -511,7 +509,7 @@ public:
 				}
 				else {
 					DWORD err = GetLastError();
-					if (err == ERROR_IO_PENDING) {
+					if (err == ERROR_IO_PENDING || err == ERROR_IO_INCOMPLETE) {
 						waiting_read_ = true;
 						SetEvent(sync_);
 						return rwresult{ rwresult::wouldblock, 0 };
@@ -558,7 +556,9 @@ public:
 				SetEvent(sync_);
 				return rwresult(len);
 			}
-			return rwresult{rwresult::other, err};
+			in_.reset();
+			write_error_ = rwresult{ rwresult::other, err };
+			return write_error_;
 		}
 		else {
 			DWORD written = 0;
@@ -579,9 +579,9 @@ private:
 	event_handler * handler_{};
 
 	mutex mutex_;
-	fz::async_task task_;
-	fz::buffer read_buffer_;
-	fz::buffer write_buffer_;
+	async_task task_;
+	buffer read_buffer_;
+	buffer write_buffer_;
 	HANDLE sync_{INVALID_HANDLE_VALUE};
 	OVERLAPPED ol_read_{};
 	OVERLAPPED ol_write_{};
@@ -606,6 +606,7 @@ private:
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <string.h>
 #include <unistd.h>
@@ -800,7 +801,9 @@ public:
 				return false;
 			}
 		}
-
+		else {
+			waiting_read_ = false;
+		}
 
 		scoped_lock fbl(forkblock_mtx_);
 		pid_t pid = fork();
@@ -889,20 +892,70 @@ public:
 			return;
 		}
 
-		auto process_event_filter = [&](event_loop::Events::value_type const& ev) -> bool {
-			if (ev.first != handler_) {
-				return false;
-			}
-			else if (ev.second->derived_type() == process_event::type()) {
-				return std::get<0>(static_cast<process_event const&>(*ev.second).v_) == &process_;
+		auto process_event_filter = [&](event_base const& ev) -> bool {
+			if (ev.derived_type() == process_event::type()) {
+				return std::get<0>(static_cast<process_event const&>(ev).v_) == &process_;
 			}
 			return false;
 		};
 
-		handler_->event_loop_.filter_events(process_event_filter);
+		handler_->filter_events(process_event_filter);
 	}
 
-	bool kill(bool wait = true, bool force = false)
+	bool do_waitpid(bool wait = false)
+	{
+		pid_t ret;
+		do {
+			ret = waitpid(pid_, nullptr, wait ? 0 : WNOHANG);
+		} while (ret == -1 && errno == EINTR);
+		return ret != 0;
+	}
+
+	bool wait(duration const& timeout)
+	{
+		if (do_waitpid()) {
+			return true;
+		}
+		if (!timeout) {
+			return false;
+		}
+
+		monotonic_clock const deadline = monotonic_clock::now() + timeout;
+
+#ifdef SYS_pidfd_open
+		int pidfd = syscall(SYS_pidfd_open, pid_, 0);
+		if (pidfd >= 0) {
+			for (duration wait; wait = deadline - monotonic_clock::now(), wait > duration();) {
+				pollfd fds{};
+				fds.fd = pidfd;
+				fds.events = POLLIN;
+				if (poll(&fds, 1, wait.get_milliseconds()) > 0) {
+					if (do_waitpid()) {
+						close(pidfd);
+						return true;
+					}
+				}
+			}
+			close(pidfd);
+			return do_waitpid();
+		}
+#endif
+		// Sadly need to fall back to waidpid with WNOHANG.
+		// Poll fast at first, then slow down
+		//
+		// Signals are no option here, this is multi-threaded
+		// library code. We cannot control what other components are doing.
+		for (duration wait, sd = duration::from_milliseconds(1); wait = deadline - monotonic_clock::now(), wait > duration(); sd += sd / 10 + duration::from_milliseconds(1)) {
+			sleep(wait > sd ? sd : wait);
+			if (do_waitpid()) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool kill(bool force = true, duration const& timeout = {})
 	{
 		if (handler_) {
 			{
@@ -920,13 +973,13 @@ public:
 		if (pid_ != -1) {
 			::kill(pid_, force ? SIGKILL : SIGTERM);
 
-			pid_t ret;
-			do {
-				ret = waitpid(pid_, nullptr, wait ? 0 : WNOHANG);
-			} while (ret == -1 && errno == EINTR);
-
-			if (!ret) {
-				return false;
+			if (force || timeout < duration()) {
+				do_waitpid(true);
+			}
+			else {
+				if (!wait(timeout)) {
+					return false;
+				}
 			}
 
 			pid_ = -1;
@@ -1082,12 +1135,19 @@ bool process::spawn(std::vector<native_string> const& command_with_args, io_redi
 	return impl_ ? impl_->spawn(command_with_args.front(), begin, command_with_args.end(), redirect_mode) : false;
 }
 
-bool process::kill(bool wait, bool force)
+void process::kill()
 {
 	if (impl_) {
-		return impl_->kill(wait, force);
+		impl_->kill(true, {});
 	}
-	return true;
+}
+
+bool process::stop(duration const& timeout)
+{
+	if (impl_) {
+		return impl_->kill(false, timeout);
+	}
+	return false;
 }
 
 rwresult process::read(void* buffer, size_t len)
@@ -1298,7 +1358,7 @@ bool spawn_detached_process(std::vector<native_string> const& cmd_with_args)
 
 	// We're using a pipe created with O_CLOEXEC to signal failure from execv.
 	// Fortunately the forkblock avoids a deadlock if the cloexec flag isn't set
-	// atomically and another threa execs in-between, as even in 2022, macOS
+	// atomically and another thread execs in-between, as even in 2022, macOS
 	// doesn't have pipe2.
 	pipe errpipe;
 	errpipe.create();

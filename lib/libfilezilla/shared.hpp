@@ -24,7 +24,7 @@ namespace fz {
 template<typename T, bool Init = false> class shared_optional final
 {
 public:
-	shared_optional();
+	shared_optional() noexcept(!Init || std::is_nothrow_constructible_v<T>);
 	shared_optional(shared_optional<T, Init> const& v) = default;
 	shared_optional(shared_optional<T, Init> && v) noexcept = default;
 	explicit shared_optional(const T& v);
@@ -83,8 +83,8 @@ template<typename T>
 using shared_value = shared_optional<T, true>;
 
 
-template<typename T, bool Init> shared_optional<T, Init>::shared_optional()
-	: data_(Init ? std::make_shared<T>() : nullptr)
+template<typename T, bool Init> shared_optional<T, Init>::shared_optional() noexcept(!Init || std::is_nothrow_constructible_v<T>)
+    : data_(Init ? std::make_shared<T>() : nullptr)
 {
 }
 

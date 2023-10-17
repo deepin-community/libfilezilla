@@ -16,6 +16,8 @@
 
 namespace fz {
 
+class datetime;
+
 /** \brief Lean class for file access
  *
  * This class uses the system's native file access functions. It is a less convoluted and much faster alternative
@@ -32,10 +34,11 @@ public:
 	typedef int file_t;
 #endif
 
-	/// Files can be opened for reading or writing, but not both
+	/// Files can be opened for reading, writing, or both
 	enum mode {
 		reading,
-		writing
+		writing,
+		readwrite
 	};
 
 	/** \brief Creation flags when opening file for writing.
@@ -179,6 +182,12 @@ public:
 	 */
 	bool fsync();
 
+	/** \brief Sets modification time to specified time.
+	 *
+	 * File must be opened for writing, of the call will fail.
+	 */
+	bool set_modification_time(datetime const& t);
+
 private:
 #ifdef FZ_WINDOWS
 	HANDLE fd_{INVALID_HANDLE_VALUE};
@@ -195,6 +204,10 @@ bool FZ_PUBLIC_SYMBOL remove_file(native_string const& name);
 
 inline file::creation_flags operator|(file::creation_flags lhs, file::creation_flags rhs) {
 	return static_cast<file::creation_flags>(static_cast<unsigned int>(lhs) | rhs);
+}
+inline file::creation_flags& operator|=(file::creation_flags & lhs, file::creation_flags rhs) {
+	lhs = static_cast<file::creation_flags>(static_cast<unsigned int>(lhs) | rhs);
+	return lhs;
 }
 
 }

@@ -4,6 +4,7 @@
 #include "libfilezilla.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -124,9 +125,9 @@ struct FZ_PUBLIC_SYMBOL less_insensitive_ascii final
 	template<typename T>
 	bool operator()(T const& lhs, T const& rhs) const {
 		return std::lexicographical_compare(lhs.cbegin(), lhs.cend(), rhs.cbegin(), rhs.cend(),
-		    [](typename T::value_type const& a, typename T::value_type const& b) {
-			    return tolower_ascii(a) < tolower_ascii(b);
-		    }
+			[](typename T::value_type const& a, typename T::value_type const& b) {
+				return tolower_ascii(a) < tolower_ascii(b);
+			}
 		);
 	}
 };
@@ -138,17 +139,17 @@ struct FZ_PUBLIC_SYMBOL less_insensitive_ascii final
 inline bool equal_insensitive_ascii(std::string_view a, std::string_view b)
 {
 	return std::equal(a.cbegin(), a.cend(), b.cbegin(), b.cend(),
-	    [](auto const& a, auto const& b) {
-		    return tolower_ascii(a) == tolower_ascii(b);
-	    }
+		[](auto const& a, auto const& b) {
+			return tolower_ascii(a) == tolower_ascii(b);
+		}
 	);
 }
 inline bool equal_insensitive_ascii(std::wstring_view a, std::wstring_view b)
 {
 	return std::equal(a.cbegin(), a.cend(), b.cbegin(), b.cend(),
-	    [](auto const& a, auto const& b) {
-		    return tolower_ascii(a) == tolower_ascii(b);
-	    }
+		[](auto const& a, auto const& b) {
+			return tolower_ascii(a) == tolower_ascii(b);
+		}
 	);
 }
 
@@ -265,10 +266,10 @@ inline auto toString(Arg&& arg) -> typename std::enable_if<std::is_same_v<String
 
  /// Returns the function argument of the type matching the template argument. \sa fzS
 template<typename Char>
-Char const* choose_string(char const* c, wchar_t const* w);
+constexpr Char const* choose_string(char const* c, wchar_t const* w);
 
-template<> inline char const* choose_string(char const* c, wchar_t const*) { return c; }
-template<> inline wchar_t const* choose_string(char const*, wchar_t const* w) { return w; }
+template<> constexpr inline char const* choose_string(char const* c, wchar_t const*) { return c; }
+template<> constexpr inline wchar_t const* choose_string(char const*, wchar_t const* w) { return w; }
 
 #if !defined(fzS) || defined(DOXYGEN)
 /** \brief Macro to get const pointer to a string of the corresponding type
@@ -306,6 +307,161 @@ bool FZ_PUBLIC_SYMBOL replace_substrings(std::wstring& in, std::wstring_view con
 /// Modifies \c in, replacing all occurrences of \c find with \c replacement
 bool FZ_PUBLIC_SYMBOL replace_substrings(std::string& in, char find, char replacement);
 bool FZ_PUBLIC_SYMBOL replace_substrings(std::wstring& in, wchar_t find, wchar_t replacement);
+
+/**
+ * \brief Container-like class that can be used to iterate over tokens in a string.
+ *
+ * The class will keep a copy of any temporary constructor's parameter.
+ * strtokenizer must live longer than the iterators created from it.
+ *
+ * Access through the iterators returns views, make sure non-temporary arguments
+ * to strtokenizer constructur live longer than the iterators.
+ *
+ * Do not modify a string for which there is an strtokenizer instance.
+ *
+ * Always use the construction guide for this class, never explictly use the
+ * template parameters.
+ *
+ * Usage example:
+ * \code
+ * for (auto t : fz::strtokenizer("foo,baz,,bar", ",", true)) {
+ *   std::cout << t << "\n";
+ * }
+ *
+ * // Will print the following:
+ * //     foo
+ * //     baz
+ * //     bar
+ * \endcode
+ */
+template <typename String, typename Delims>
+class strtokenizer
+{
+	using view_type = std::basic_string_view<std::decay_t<decltype(std::declval<String>()[0])>>;
+
+public:
+	/**
+	 * \brief strtokenizer class constructor.
+	 *
+	 * \param delims the delimiters to look for
+	 * \param ignore_empty If true, empty tokens are omitted in the output
+	 */
+	constexpr strtokenizer(String && string, Delims &&delims, bool ignore_empty)
+		: string_(std::forward<String>(string))
+		, delims_(std::forward<Delims>(delims))
+		, ignore_empty_(ignore_empty)
+	{}
+
+	using value_type = const view_type;
+	using pointer = value_type*;
+	using reference = value_type&;
+	using size_type = std::size_t;
+	using difference_type = std::ptrdiff_t;
+
+	struct sentinel{};
+
+	struct iterator
+	{
+		using iterator_category = std::input_iterator_tag;
+		using difference_type   = strtokenizer::difference_type;
+		using value_type        = strtokenizer::value_type;
+		using pointer           = strtokenizer::pointer;
+		using reference         = strtokenizer::reference;
+
+		constexpr bool operator !=(sentinel) const
+		{
+			return !s_.empty();
+		}
+
+		constexpr bool operator ==(sentinel) const
+		{
+			return s_.empty();
+		}
+
+		constexpr value_type operator*() const
+		{
+			return s_.substr(0, pos_);
+		}
+
+		constexpr iterator &operator++()
+		{
+			for (;;) {
+				if (pos_ != s_.size()) {
+					++pos_;
+				}
+
+				s_.remove_prefix(pos_);
+
+				pos_ = s_.find_first_of(t_->delims_);
+
+				if (pos_ == view_type::npos) {
+					pos_ = s_.size();
+					break;
+				}
+
+				if (pos_ != 0 || !t_->ignore_empty_) {
+					break;
+				}
+			}
+
+			return *this;
+		}
+
+	private:
+		friend strtokenizer;
+
+		constexpr iterator(const strtokenizer *t)
+			: t_(t)
+			, s_(view_type(t_->string_))
+			, pos_(view_type::npos)
+		{
+			operator++();
+		}
+
+		const strtokenizer *t_;
+		view_type s_;
+		size_type pos_;
+	};
+
+	using const_value_type = value_type;
+	using const_pointer = pointer;
+	using const_reference = reference;
+	using const_iterator = iterator;
+
+	constexpr iterator begin() const
+	{
+		return { this };
+	}
+
+	constexpr sentinel end() const
+	{
+		return {};
+	}
+
+	constexpr const_iterator cbegin() const
+	{
+		return { this };
+	}
+
+	constexpr sentinel cend() const
+	{
+		return {};
+	}
+
+public:
+	String string_;
+	Delims delims_;
+	bool ignore_empty_;
+};
+
+/**
+ * \brief strtokenizer class construction-guide.
+ *
+ * \param delims the delimiters to look for
+ * \param ignore_empty If true, empty tokens are omitted in the output
+ */
+template <typename String, typename Delims>
+strtokenizer(String && string, Delims &&delims, bool ignore_empty) -> strtokenizer<String, Delims>;
 
 /**
  * \brief Tokenizes string.
@@ -547,6 +703,71 @@ bool ends_with(String const& s, String const& ending)
  */
 std::string FZ_PUBLIC_SYMBOL normalize_hyphens(std::string_view const& in);
 std::wstring FZ_PUBLIC_SYMBOL normalize_hyphens(std::wstring_view const& in);
+
+/// Verifies that the input data is valid UTF-8.
+bool FZ_PUBLIC_SYMBOL is_valid_utf8(std::string_view s);
+
+/**
+ * \brief Verifies that the input data is valid UTF-8.
+ *
+ * The verfication state is exposed, you can use this function to verify
+ * data to be in UTF-8 in a piecewise fashion.
+ * When starting verification, initialize state with 0 and call the function
+ * for as many blocks of data as needed, each time passing the previously
+ * updated state along.
+ *
+ * If the input data on any particular call ends in the midlde of a UTF-8
+ * sequence, state is updated, so that the the check can continue with the
+ * next block of data.
+ *
+ * Once you have no data left to verify, check that the state is zero. If it
+ * is non-zero, the input data was prematurely terminated in the middle of a
+ * UTF-8 sequence.
+ *
+ * If the input data is invalid, the function returns false and state is
+ * updated with the offset of the offending input byte.
+ */
+bool FZ_PUBLIC_SYMBOL is_valid_utf8(std::string_view s, size_t & state);
+
+/**
+ * \brief Encodes a valid Unicode codepoint as UTF-8 and appends it to the passed string
+ *
+ * Undefined if not passed a valid codepoint.
+ */
+void FZ_PUBLIC_SYMBOL unicode_codepoint_to_utf8_append(std::string& result, uint32_t codepoint);
+
+/**
+ * \brief Converts from UTF-16-BE and appends it to the passed string
+ *
+ * The conversion state is exposed, you can use this function to convert
+ * data to UTF-8 in a piecewise fashion.
+ * When starting conversion, initialize state with 0 and call the function
+ * for as many blocks of data as needed, each time passing the previously
+ * updated state along.
+ *
+ * If the input data on any particular call ends in the midlde of a UTF-16
+ * sequence, state is updated, so that the conversion can continue at the next
+ * iteration.
+ *
+ * Once you have no data left to convert, check that the state is zero. If it
+ * is non-zero, the input data was prematurely terminated in the middle of a
+ * UTF-16 sequence.
+ *
+ * If the input data is invalid, the function returns false and state is
+ * updated with the offset of the offending input byte.
+ */
+bool FZ_PUBLIC_SYMBOL utf16be_to_utf8_append(std::string & result, std::string_view data, uint32_t & state);
+
+/// Just as utf16be_to_utf8_append but for little-endian UTF-16.
+bool FZ_PUBLIC_SYMBOL utf16le_to_utf8_append(std::string & result, std::string_view data, uint32_t & state);
+
+inline native_string to_native_from_utf8(std::string_view s) {
+#ifdef FZ_WINDOWS
+	return to_wstring_from_utf8(s);
+#else
+	return to_string(to_wstring_from_utf8(s));
+#endif
+}
 
 }
 

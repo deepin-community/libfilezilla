@@ -41,7 +41,7 @@ public:
 		std::string const& fingerprint_sha1,
 		std::string const& issuer,
 		std::string const& subject,
-	    std::vector<subject_name> const& alt_subject_names,
+		std::vector<subject_name> const& alt_subject_names,
 		bool const self_signed);
 
 	x509_certificate(
@@ -54,7 +54,7 @@ public:
 		std::string const& fingerprint_sha1,
 		std::string const& issuer,
 		std::string const& subject,
-	    std::vector<subject_name> && alt_subject_names,
+		std::vector<subject_name> && alt_subject_names,
 		bool const self_Signed);
 
 
@@ -131,6 +131,16 @@ private:
 std::vector<x509_certificate> FZ_PUBLIC_SYMBOL load_certificates_file(native_string const& certsfile, bool pem, bool sort, logger_interface * logger = nullptr);
 std::vector<x509_certificate> FZ_PUBLIC_SYMBOL load_certificates(std::string_view const& certdata, bool pem, bool sort, logger_interface * logger = nullptr);
 
+/** \brief Checks that the key and certificates chain are valid and matching.
+ *
+ * If the password is non-empty, the private key is assumed to having been encrypted using it.
+ *
+ * If the pem flag is set, the input is assumed to be in PEM, otherwise DER.
+ *
+ * Returns an error string. If empty, then the check was successful.
+ */
+native_string FZ_PUBLIC_SYMBOL check_certificate_status(std::string_view const& key, std::string_view const& certs, native_string const& password, bool pem = true);
+
 /**
  * \brief Information about a TLS session
  *
@@ -156,8 +166,8 @@ public:
 		std::string const& session_cipher,
 		std::string const& session_mac,
 		int algorithm_warnings,
-	    std::vector<x509_certificate>&& peer_certificates,
-	    std::vector<x509_certificate>&& system_trust_chain,
+		std::vector<x509_certificate>&& peer_certificates,
+		std::vector<x509_certificate>&& system_trust_chain,
 		bool hostname_mismatch);
 
 	/// The server's hostname used to connect

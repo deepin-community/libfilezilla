@@ -9,6 +9,7 @@ test_SOURCES =  test.cpp \
 		dispatch.cpp \
 		eventloop.cpp \
 		format.cpp \
+		hash.cpp \
 		invoker.cpp \
 		iputils.cpp \
 		json.cpp \
@@ -16,7 +17,8 @@ test_SOURCES =  test.cpp \
 		socket.cpp \
 		string.cpp \
 		time.cpp \
-		util.cpp
+		util.cpp \
+		xml.cpp
 
 test_CPPFLAGS = $(AM_CPPFLAGS)
 test_CPPFLAGS += $(CPPUNIT_CFLAGS)

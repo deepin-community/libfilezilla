@@ -1,5 +1,5 @@
 #ifndef LIBFILEZILLA_GLUE_REGISTRY_HEADER
-#define LIBFILEZILLA_GLUE__REGISTRY_HEADER
+#define LIBFILEZILLA_GLUE_REGISTRY_HEADER
 
 /** \file
  * \brief Declares fz::regkey to access the Windows Registry
@@ -9,10 +9,10 @@
 
 #ifdef FZ_WINDOWS
 
+#include "windows.hpp"
+
 #include <optional>
 #include <string>
-
-#include "windows.h"
 
 namespace fz {
 

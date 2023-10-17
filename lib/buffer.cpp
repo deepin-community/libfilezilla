@@ -129,10 +129,14 @@ void buffer::clear()
 
 void buffer::append(unsigned char const* data, size_t len)
 {
+	if (!len) {
+		return;
+	}
+
 	// Do the same initially as buffer::get would do, but don't delete the old pointer
 	// until after appending in case of append from own memory
-	unsigned char* old{};
 	if (capacity_ - (pos_ - data_) - size_ < len) {
+		unsigned char* old{};
 		if (capacity_ - size_ >= len) {
 			// Also offset data in case of self-assignment
 			if (data >= pos_ && data < (pos_ + size_)) {
@@ -156,14 +160,14 @@ void buffer::append(unsigned char const* data, size_t len)
 			data_ = d;
 			pos_ = d;
 		}
+		memcpy(pos_ + size_, data, len);
+		size_ += len;
+		delete [] old;
 	}
-
-	if (len) {
+	else {
 		memcpy(pos_ + size_, data, len);
 		size_ += len;
 	}
-
-	delete [] old;
 }
 
 void buffer::append(std::string_view const& str)

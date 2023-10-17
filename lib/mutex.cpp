@@ -333,7 +333,7 @@ bool condition::wait(scoped_lock& l, duration const& timeout)
 	bool const success = SleepConditionVariableCS(&cond_, l.m_, static_cast<DWORD>(ms)) != 0;
 	debug_post_wait(l.m_);
 #else
-	int res;
+
 	timespec ts;
 #if HAVE_CLOCK_GETTIME && HAVE_DECL_PTHREAD_CONDATTR_SETCLOCK
 	clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -346,11 +346,12 @@ bool condition::wait(scoped_lock& l, duration const& timeout)
 
 	ts.tv_sec += timeout.get_milliseconds() / 1000;
 	ts.tv_nsec += (timeout.get_milliseconds() % 1000) * 1000 * 1000;
-	if (ts.tv_nsec > 1000000000ll) {
+	if (ts.tv_nsec >= 1000000000ll) {
 		++ts.tv_sec;
 		ts.tv_nsec -= 1000000000ll;
 	}
 
+	int res;
 	do {
 		debug_prepare_wait(l.m_);
 		res = pthread_cond_timedwait(&cond_, l.m_, &ts);

@@ -507,23 +507,9 @@ std::vector<Ret> strtok_impl(String && s, String && delims, bool const ignore_em
 {
 	std::vector<Ret> ret;
 
-	typename std::decay_t<String>::size_type start{}, pos{};
-
-	do {
-		pos = s.find_first_of(delims, start);
-
-		// Not found, we're at ends;
-		if (pos == std::decay_t<String>::npos) {
-			if (start < s.size()) {
-				ret.emplace_back(s.substr(start));
-			}
-		}
-		else if (pos > start || !ignore_empty) {
-			// Non-empty substring
-			ret.emplace_back(s.substr(start, pos - start));
-		}
-		start = pos + 1;
-	} while (pos != std::decay_t<String>::npos);
+	for (auto t: strtokenizer(s, delims, ignore_empty)) {
+		ret.push_back(Ret(t));
+	}
 
 	return ret;
 }
@@ -577,6 +563,313 @@ std::wstring normalize_hyphens(std::wstring_view const& in)
 	fz::replace_substrings(ret, L"\u2212", L"-"); // Minus Sign
 
 	return ret;
+}
+
+bool is_valid_utf8(std::string_view s, size_t & state)
+{
+	if (!s.size()) {
+		return true;
+	}
+
+	int const instate = state;
+	state = 0;
+
+	enum states : size_t {
+		valid,
+		cont3_3,
+		cont3_2,
+		cont3_1,
+		cont2_2,
+		cont2_1,
+		cont1
+	};
+
+	auto p = s.data();
+	auto const end = p + s.size();
+	auto const max = s.size() >= 8 ? p + s.size() - 8 : p;
+	unsigned char c{};
+
+	switch (instate) {
+	default:
+		break;
+	case cont3_3:
+		goto cont3_3;
+	case cont3_2:
+		goto cont3_2;
+	case cont3_1:
+		goto cont3_1;
+	case cont2_2:
+		goto cont2_2;
+	case cont2_1:
+		goto cont2_1;
+	case cont1:
+		goto cont1;
+	}
+
+	while (p != end) {
+		// If aligned on 8 byte boundary, look at 8 bytes at a time
+		if (!(uintptr_t(p) % 8)) {
+			while (p < max) {
+				uint64_t const *v = reinterpret_cast<uint64_t const*>(p);
+				// Look for any byte with highest most bit set
+				if (*v & 0x8080808080808080ull) {
+					break;
+				}
+				p += 8;
+			}
+		}
+
+		// Either not aligned, or a high bit found. Look at the data in detail.
+		c = *p++;
+		if (c < 0x80) {
+			continue;
+		}
+		if (c >= 0xf5u) {
+			state = p - s.data() - 1;
+			return false;
+		}
+		else if (c >= 0xf0u) {
+			// 3 continuation bytes
+			if (p == end) {
+				state = cont3_3;
+				return true;
+			}
+cont3_3:
+
+			if (c == 0xf0u) {
+				// Check for overlong
+				c = *p++;
+				if (c < 0x90u || c > 0xbfu) {
+					state = p - s.data() - 1;
+					return false;
+				}
+			}
+			else if (c == 0xf4u) {
+				// Check for > U+10FFFF
+				c = *p++;
+				if (c < 0x80u || c > 0x8fu) {
+					state = p - s.data() - 1;
+					return false;
+				}
+			}
+			else if ((*p++ & 0xc0u) != 0x80u) {
+				state = p - s.data() - 1;
+				return false;
+			}
+
+			if (p == end) {
+				state = cont3_2;
+				return true;
+			}
+cont3_2:
+			if ((*p++ & 0xc0u) != 0x80u) {
+				state = p - s.data() - 1;
+				return false;
+			}
+
+			if (p == end) {
+				state = cont3_1;
+				return true;
+			}
+cont3_1:
+			if ((*p++ & 0xc0u) != 0x80u) {
+				state = p - s.data() - 1;
+				return false;
+			}
+		}
+		else if (c >= 0xe0u) {
+			// 2 continuation bytes
+			if (p == end) {
+				state = cont2_2;
+				return true;
+			}
+cont2_2:
+
+			if (c == 0xe0u) {
+				// Check for overlong
+				c = *p++;
+				if (c < 0xa0u || c > 0xbfu) {
+					state = p - s.data() - 1;
+					return false;
+				}
+			}
+			else if (c == 0xedu) {
+				// Check for surrogates
+				c = *p++;
+				if (c < 0x80u || c > 0x9fu) {
+					state = p - s.data() - 1;
+					return false;
+				}
+			}
+			else if ((*p++ & 0xc0u) != 0x80u) {
+				state = p - s.data() - 1;
+				return false;
+			}
+
+			if (p == end) {
+				state = cont2_1;
+				return true;
+			}
+cont2_1:
+			if ((*p++ & 0xc0u) != 0x80u) {
+				state = p - s.data() - 1;
+				return false;
+			}
+		}
+		else if (c >= 0xc2u) {
+			// 1 continuation byte
+			if (p == end) {
+				state = cont1;
+				return true;
+			}
+cont1:
+
+			if ((*p++ & 0xc0u) != 0x80u) {
+				state = p - s.data() - 1;
+				return false;
+			}
+		}
+		else if (c >= 0x80u) {
+			state = p - s.data() - 1;
+			return false;
+		}
+	}
+	return true;
+}
+
+bool is_valid_utf8(std::string_view s)
+{
+	size_t state{};
+	return is_valid_utf8(s, state) && !state;
+}
+
+void unicode_codepoint_to_utf8_append(std::string& result, uint32_t cp)
+{
+	if (cp <= 0x7f) {
+		result += static_cast<char>(cp);
+	}
+	else if (cp <= 0x7ff) {
+		result += static_cast<char>(0xc0u | ((cp >> 6u) & 0x1fu));
+		result += static_cast<char>(0x80u | (cp & 0x3fu));
+	}
+	else if (cp <= 0xffff) {
+		result += static_cast<char>(0xe0u | ((cp >> 12u) & 0x0fu));
+		result += static_cast<char>(0x80u | ((cp >> 6u) & 0x3fu));
+		result += static_cast<char>(0x80u | (cp & 0x3fu));
+	}
+	else {
+		result += static_cast<char>(0xf0u | ((cp >> 18u) & 0x07u));
+		result += static_cast<char>(0x80u | ((cp >> 12u) & 0x3fu));
+		result += static_cast<char>(0x80u | ((cp >> 6u) & 0x3fu));
+		result += static_cast<char>(0x80u | (cp & 0x3fu));
+	}
+}
+
+bool utf16be_to_utf8_append(std::string & result, std::string_view data, uint32_t & state)
+{
+	if (data.empty()) {
+		return true;
+	}
+
+	auto const* p = reinterpret_cast<unsigned char const*>(&data[0]);
+	auto const* end = p + data.size();
+
+	if (state & 0x80000000u) {
+		goto utf16_be_cont;
+	}
+
+	while (p < end) {
+		state |= static_cast<uint32_t>(*p++) << 8;
+		if (p == end) {
+			state |= 0x80000000u;
+			break;
+		}
+utf16_be_cont:
+		state |= static_cast<unsigned char>(*p++);
+		state &= ~0x80000000u;
+		if (state & 0x40000000u) {
+			// Expect low surrogate
+			auto low = state & 0xffffu;
+			if (low < 0xdc00u || low > 0xdfffu) {
+				state = p - reinterpret_cast<unsigned char const*>(data.data()) - 1;
+				return false;
+			}
+			auto codepoint = (state & 0x3ff0000u) >> 6;
+			codepoint |= low & 0x3ffu;
+			codepoint += 0x10000u;
+
+			fz::unicode_codepoint_to_utf8_append(result, codepoint);
+			state = 0;
+		}
+		else if (state >= 0xd800u && state <= 0xdbffu) {
+			// High surrogate
+			state = 0x40000000u | (state & 0x3ffu) << 16;
+		}
+		else if (state >= 0xdc00u && state <= 0xdfffu) {
+			state = p - reinterpret_cast<unsigned char const*>(data.data()) - 1;
+			return false;
+		}
+		else {
+			unicode_codepoint_to_utf8_append(result, state);
+			state = 0;
+		}
+	}
+
+	return true;
+}
+
+
+bool utf16le_to_utf8_append(std::string & result, std::string_view data, uint32_t & state)
+{
+	if (data.empty()) {
+		return true;
+	}
+
+	auto const* p = reinterpret_cast<unsigned char const*>(&data[0]);
+	auto const* end = p + data.size();
+
+	if (state & 0x80000000u) {
+		goto utf16_le_cont;
+	}
+
+	while (p < end) {
+		state |= *p++;
+		if (p == end) {
+			state |= 0x80000000u;
+			break;
+		}
+utf16_le_cont:
+		state |= static_cast<uint32_t>(*p++) << 8;
+		state &= ~0x80000000u;
+		if (state & 0x40000000u) {
+			// Expect low surrogate
+			auto low = state & 0xffffu;
+			if (low < 0xdc00u || low > 0xdfffu) {
+				state = p - reinterpret_cast<unsigned char const*>(data.data()) - 1;
+				return false;
+			}
+			auto codepoint = (state & 0x3ff0000u) >> 6;
+			codepoint |= low & 0x3ffu;
+			codepoint += 0x10000u;
+
+			fz::unicode_codepoint_to_utf8_append(result, codepoint);
+			state = 0;
+		}
+		else if (state >= 0xd800u && state <= 0xdbffu) {
+			// High surrogate
+			state = 0x40000000u | (state & 0x3ffu) << 16;
+		}
+		else if (state >= 0xdc00u && state <= 0xdfffu) {
+			state = p - reinterpret_cast<unsigned char const*>(data.data()) - 1;
+			return false;
+		}
+		else {
+			unicode_codepoint_to_utf8_append(result, state);
+			state = 0;
+		}
+	}
+
+	return true;
 }
 
 }
