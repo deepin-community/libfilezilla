@@ -12,33 +12,41 @@ json::json(json_type t)
 
 void json::set_type(json_type t)
 {
-	if (type_ == t) {
+	if (type() == t) {
 		return;
 	}
 
-	type_ = t;
 	switch (t) {
-		case json_type::object:
-			value_ = value_type{std::in_place_type<std::map<std::string, json, std::less<>>>};
-			break;
-		case json_type::array:
-			value_ = value_type{std::in_place_type<std::vector<json>>};
-			break;
-		case json_type::boolean:
-			value_ = false;
-			break;
-		default:
-			value_ = value_type{std::in_place_type<std::string>};
-			break;
+	case json_type::none:
+		value_.emplace<std::size_t(json_type::none)>();
+		break;
+	case json_type::null:
+		value_.emplace<std::size_t(json_type::null)>();
+		break;
+	case json_type::object:
+		value_.emplace<std::size_t(json_type::object)>();
+		break;
+	case json_type::array:
+		value_.emplace<std::size_t(json_type::array)>();
+		break;
+	case json_type::string:
+		value_.emplace<std::size_t(json_type::string)>();
+		break;
+	case json_type::number:
+		value_.emplace<std::size_t(json_type::number)>();
+		break;
+	case json_type::boolean:
+		value_.emplace<std::size_t(json_type::boolean)>();
+		break;
 	}
 }
 
 bool json::check_type(json_type t)
 {
-	if (type_ == t) {
+	if (type() == t) {
 		return true;
 	}
-	if (type_ == json_type::none) {
+	if (type() == json_type::none) {
 		set_type(t);
 		return true;
 	}
@@ -48,73 +56,84 @@ bool json::check_type(json_type t)
 
 void json::erase(std::string const& name)
 {
-	if (type_ == json_type::object) {
-		std::get<1>(value_).erase(name);
+	if (auto *m = std::get_if<std::size_t(json_type::object)>(&value_)) {
+		m->erase(name);
 	}
 }
 
 json const& json::operator[](std::string const& name) const
 {
 	static json const nil;
-	if (type_ != json_type::object) {
-		return nil;
+
+	if (auto *m = std::get_if<std::size_t(json_type::object)>(&value_)) {
+		auto it = m->find(name);
+		if (it != m->end()) {
+			return it->second;
+		}
 	}
-	auto const& m = std::get<1>(value_);
-	auto it = m.find(name);
-	if (it == m.end()) {
-		return nil;
-	}
-	else {
-		return it->second;
-	}
+
+	return nil;
 }
 
 json& json::operator[](std::string const& name)
 {
-	if (!check_type(json_type::object)) {
-		static thread_local json nil;
-		return nil;
+	if (type() == json_type::none) {
+		return value_.emplace<std::size_t(json_type::object)>()[name];
 	}
-	return std::get<1>(value_)[name];
+
+	if (auto *m = std::get_if<std::size_t(json_type::object)>(&value_)) {
+		return (*m)[name];
+	}
+
+	static thread_local json nil;
+	return nil;
 }
 
 json const& json::operator[](size_t i) const
 {
 	static json const nil;
-	if (type_ != json_type::array || i >= std::get<2>(value_).size()) {
-		return nil;
+
+	if (auto *a = std::get_if<std::size_t(json_type::array)>(&value_)) {
+		if (i < a->size()) {
+			return (*a)[i];
+		}
 	}
-	return std::get<2>(value_)[i];
+
+	return nil;
 }
 
 json& json::operator[](size_t i)
 {
-	if (!check_type(json_type::array)) {
-		static thread_local json nil;
-		return nil;
+	if (type() == json_type::none) {
+		return value_.emplace<std::size_t(json_type::array)>(i + 1)[i];
 	}
-	auto & v = std::get<2>(value_);
-	if (v.size() <= i) {
-		v.resize(i + 1);
+
+	if (auto *a = std::get_if<std::size_t(json_type::array)>(&value_)) {
+		if (a->size() <= i) {
+			a->resize(i + 1);
+		}
+		return (*a)[i];
 	}
-	return v[i];
+
+	static thread_local json nil;
+	return nil;
 }
 
 size_t json::children() const
 {
-	if (type_ == json_type::array) {
-		return std::get<2>(value_).size();
+	if (auto *v = std::get_if<std::size_t(json_type::array)>(&value_)) {
+		return v->size();
 	}
-	else if (type_ == json_type::object) {
-		return std::get<1>(value_).size();
+	else
+	if (auto *v = std::get_if<std::size_t(json_type::object)>(&value_)) {
+		return v->size();
 	}
 	return 0;
 }
 
 void json::clear()
 {
-	type_ = json_type::none;
-	value_ = value_type();
+	value_ = {};
 }
 
 namespace {
@@ -158,7 +177,15 @@ std::string json::to_string(bool pretty, size_t depth) const
 
 void json::to_string(std::string & ret, bool pretty, size_t depth) const
 {
-	switch (type_) {
+	if (pretty && type() != json_type::none) {
+		ret.append(depth * 2, ' ');
+	}
+	to_string_impl(ret, pretty, depth);
+}
+
+void json::to_string_impl(std::string & ret, bool pretty, size_t depth) const
+{
+	switch (type()) {
 	case json_type::object: {
 		ret += '{';
 		if (pretty) {
@@ -166,7 +193,7 @@ void json::to_string(std::string & ret, bool pretty, size_t depth) const
 			ret.append(depth * 2 + 2, ' ');
 		}
 		bool first{true};
-		for (auto const& c : std::get<1>(value_)) {
+		for (auto const& c : *std::get_if<std::size_t(json_type::object)>(&value_)) {
 			if (!c.second) {
 				continue;
 			}
@@ -202,7 +229,7 @@ void json::to_string(std::string & ret, bool pretty, size_t depth) const
 			ret.append(depth * 2 + 2, ' ');
 		}
 		bool first = true;
-		for (auto const& c : std::get<2>(value_)) {
+		for (auto const& c : *std::get_if<std::size_t(json_type::array)>(&value_)) {
 			if (first) {
 				first = false;
 			}
@@ -228,17 +255,17 @@ void json::to_string(std::string & ret, bool pretty, size_t depth) const
 		break;
 	}
 	case json_type::boolean:
-		ret += std::get<3>(value_) ? "true" : "false";
+		ret += *std::get_if<std::size_t(json_type::boolean)>(&value_) ? "true" : "false";
 		break;
 	case json_type::number:
-		ret += std::get<0>(value_);
+		ret += *std::get_if<std::size_t(json_type::number)>(&value_);
 		break;
 	case json_type::null:
 		ret += "null";
 		break;
 	case json_type::string:
 		ret += '"';
-		json_append_escaped(ret, std::get<0>(value_));
+		json_append_escaped(ret, *std::get_if<std::size_t(json_type::string)>(&value_));
 		ret += '"';
 		break;
 	case json_type::none:
@@ -368,24 +395,7 @@ std::pair<std::string, bool> json_unescape_string(char const*& p, char const* en
 						return {};
 					}
 
-					if (u <= 0x7f) {
-						ret += static_cast<char>(u);
-					}
-					else if (u <= 0x7ff) {
-						ret += static_cast<char>(0xc0u | ((u >> 6u) & 0x1fu));
-						ret += static_cast<char>(0x80u | (u & 0x3fu));
-					}
-					else if (u <= 0xffff) {
-						ret += static_cast<char>(0xe0u | ((u >> 12u) & 0x0fu));
-						ret += static_cast<char>(0x80u | ((u >> 6u) & 0x3fu));
-						ret += static_cast<char>(0x80u | (u & 0x3fu));
-					}
-					else {
-						ret += static_cast<char>(0xf0u | ((u >> 18u) & 0x07u));
-						ret += static_cast<char>(0x80u | ((u >> 12u) & 0x3fu));
-						ret += static_cast<char>(0x80u | ((u >> 6u) & 0x3fu));
-						ret += static_cast<char>(0x80u | (u & 0x3fu));
-					}
+					unicode_codepoint_to_utf8_append(ret, u);
 					break;
 				}
 				default:
@@ -429,8 +439,7 @@ json json::parse(char const*& p, char const* end, size_t max_depth)
 			return {};
 		}
 
-		j.type_ = json_type::string;
-		j.value_ = std::move(s);
+		j.value_.emplace<std::size_t(json_type::string)>(std::move(s));
 	}
 	else if (*p == '{') {
 		++p;
@@ -481,7 +490,7 @@ json json::parse(char const*& p, char const* end, size_t max_depth)
 				return {};
 			}
 		}
-		j.type_ = json_type::object;
+
 		j.value_ = std::move(children);
 	}
 	else if (*p == '[') {
@@ -518,7 +527,7 @@ json json::parse(char const*& p, char const* end, size_t max_depth)
 			}
 			children.emplace_back(std::move(v));
 		}
-		j.type_ = json_type::array;
+
 		j.value_ = std::move(children);
 	}
 	else if ((*p >= '0' && *p <= '9') || *p == '-') {
@@ -551,20 +560,18 @@ json json::parse(char const*& p, char const* end, size_t max_depth)
 		if (v.empty() || v.back() < '0' || v.back() > '9') {
 			return {};
 		}
-		j.type_ = json_type::number;
-		j.value_ = std::move(v);
+
+		j.value_.emplace<std::size_t(json_type::number)>(std::move(v));
 	}
 	else if (end - p >= 4 && !memcmp(p, "null", 4)) {
-		j.type_ = json_type::null;
+		j.value_ = nullptr;
 		p += 4;
 	}
 	else if (end - p >= 4 && !memcmp(p, "true", 4)) {
-		j.type_ = json_type::boolean;
 		j.value_ = true;
 		p += 4;
 	}
 	else if (end - p >= 5 && !memcmp(p, "false", 5)) {
-		j.type_ = json_type::boolean;
 		j.value_ = false;
 		p += 5;
 	}
@@ -574,10 +581,8 @@ json json::parse(char const*& p, char const* end, size_t max_depth)
 
 json& json::operator=(std::string_view const& v)
 {
-	type_ = json_type::string;
 	// see comment in operator=(json const&)
-	auto s = std::string(v);
-	value_ = std::move(s);
+	value_.emplace<std::size_t(json_type::string)>(v);
 	return *this;
 }
 
@@ -603,11 +608,20 @@ char get_radix() {
 
 double json::number_value_double() const
 {
-	if (type_ != json_type::number && type_ != json_type::string) {
+	std::string const *s{};
+
+	if (auto *v = std::get_if<std::size_t(json_type::number)>(&value_)) {
+		s = v;
+	}
+	else if (auto *v = std::get_if<std::size_t(json_type::string)>(&value_)) {
+		s = v;
+	}
+	else {
 		return {};
 	}
 
-	std::string v = std::get<0>(value_);
+	std::string v = *s;
+
 	size_t pos = v.find('.');
 	if (pos != std::string::npos) {
 		v[pos] = get_radix();
@@ -624,11 +638,20 @@ double json::number_value_double() const
 
 uint64_t json::number_value_integer() const
 {
-	if (type_ != json_type::number && type_ != json_type::string) {
+	std::string const *s{};
+
+	if (auto *v = std::get_if<std::size_t(json_type::number)>(&value_)) {
+		s = v;
+	}
+	else if (auto *v = std::get_if<std::size_t(json_type::string)>(&value_)) {
+		s = v;
+	}
+	else {
 		return {};
 	}
 
-	std::string const& v = std::get<0>(value_);
+
+	std::string const& v = *s;
 	bool floating{};
 
 	size_t i = 0;
@@ -652,22 +675,25 @@ uint64_t json::number_value_integer() const
 
 bool json::bool_value() const
 {
-	if (type_ == json_type::boolean) {
-		return std::get<3>(value_);
+	if (auto *v = std::get_if<std::size_t(json_type::boolean)>(&value_)) {
+		return *v;
 	}
-	else if (type_ == json_type::string) {
-		return std::get<0>(value_) == "true";
+	if (auto *v = std::get_if<std::size_t(json_type::string)>(&value_)) {
+		return *v == "true";
 	}
 	return false;
 }
 
 std::string json::string_value() const
 {
-	if (type_ == json_type::string || type_ == json_type::number) {
-		return std::get<0>(value_);
+	if (auto *v = std::get_if<std::size_t(json_type::string)>(&value_)) {
+		return *v;
 	}
-	else if (type_ == json_type::boolean) {
-		return std::get<3>(value_) ? "true" : "false";
+	if (auto *v = std::get_if<std::size_t(json_type::number)>(&value_)) {
+		return *v;
+	}
+	if (auto *v = std::get_if<std::size_t(json_type::boolean)>(&value_)) {
+		return *v ? "true" : "false";
 	}
 	return {};
 }
@@ -681,7 +707,6 @@ json& json::operator=(json const& j)
 		// fz::json const& ref = j;
 		// j = ref["child"];
 		auto v = j.value_;
-		type_ = j.type_;
 		value_ = std::move(v);
 	}
 	return *this;
@@ -691,7 +716,6 @@ json& json::operator=(json && j) noexcept
 {
 	if (&j != this) {
 		auto v = std::move(j.value_);
-		type_ = j.type_;
 		value_ = std::move(v);
 	}
 	return *this;

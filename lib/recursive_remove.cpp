@@ -3,7 +3,7 @@
 #include "libfilezilla/recursive_remove.hpp"
 
 #if FZ_WINDOWS
-#include "windows/dll.hpp"
+#include "libfilezilla/glue/dll.hpp"
 #else
 #include <unistd.h>
 #endif
@@ -19,7 +19,7 @@ bool recursive_remove::remove(const native_string& path)
 
 #if FZ_WINDOWS
 extern "C" {
-typedef int (*shfileop_t)(LPSHFILEOPSTRUCTW);
+typedef int (STDAPICALLTYPE *shfileop_t)(LPSHFILEOPSTRUCTW);
 }
 #endif
 
@@ -33,7 +33,7 @@ bool recursive_remove::remove(std::list<native_string> dirsToVisit)
 
 #ifdef FZ_WINDOWS
 	shdlls& dlls = shdlls::get();
-	static shfileop_t const shfileop = dlls.shell32_ ? reinterpret_cast<shfileop_t>(GetProcAddress(dlls.shell32_.h_, "SHFileOperationW")) : nullptr;
+	static auto const shfileop = reinterpret_cast<shfileop_t>(dlls.shell32_["SHFileOperationW"]);
 	if (shfileop) {
 		// SHFileOperation accepts a list of null-terminated strings. Go through all
 		// paths to get the required buffer length

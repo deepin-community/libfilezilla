@@ -26,12 +26,27 @@ void event_handler::remove_handler()
 
 timer_id event_handler::add_timer(duration const& interval, bool one_shot)
 {
-	return event_loop_.add_timer(this, interval, one_shot);
+	return event_loop_.add_timer(this, monotonic_clock::now() + interval, one_shot ? duration() : interval);
+}
+
+timer_id event_handler::add_timer(monotonic_clock const& deadline, duration const& interval)
+{
+	return event_loop_.add_timer(this, deadline, interval);
 }
 
 void event_handler::stop_timer(timer_id id)
 {
 	event_loop_.stop_timer(id);
+}
+
+timer_id event_handler::stop_add_timer(timer_id id, duration const& interval, bool one_shot)
+{
+	return event_loop_.stop_add_timer(id, this, monotonic_clock::now() + interval, one_shot ? duration() : interval);
+}
+
+timer_id event_handler::stop_add_timer(timer_id id, monotonic_clock const& deadline, duration const& interval)
+{
+	return event_loop_.stop_add_timer(id, this, deadline, interval);
 }
 
 }

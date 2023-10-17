@@ -23,10 +23,12 @@ class FZ_PUBLIC_SYMBOL event_base
 {
 public:
 	event_base() = default;
-	virtual ~event_base() {}
+	virtual ~event_base() = default;
 
-	event_base(event_base const&) = delete;
-	event_base& operator=(event_base const&) = delete;
+	event_base(event_base const&) = default;
+	event_base& operator=(event_base const&) = default;
+	event_base(event_base &&) = default;
+	event_base& operator=(event_base &&) = default;
 
 	/**
 	The returned pointer must be unique for the derived type such that:
@@ -68,16 +70,13 @@ public:
 	typedef UniqueType unique_type;
 	typedef std::tuple<Values...> tuple_type;
 
-	simple_event() = default;
+	using event_base::event_base;
 
 	template<typename First_Value, typename...Remaining_Values>
 	explicit simple_event(First_Value&& value, Remaining_Values&& ...values)
-		: v_(std::forward<First_Value>(value), std::forward<Remaining_Values>(values)...)
+	    : v_(std::forward<First_Value>(value), std::forward<Remaining_Values>(values)...)
 	{
 	}
-
-	simple_event(simple_event const& op) = default;
-	simple_event& operator=(simple_event const& op) = default;
 
 	/// \brief Returns a unique id for the type such that can be used directly in derived_type.
 	inline static size_t type() {
@@ -88,7 +87,7 @@ public:
 	}
 
 	/// \brief Simply returns \ref type()
-	virtual size_t derived_type() const {
+	virtual size_t derived_type() const override {
 		return type();
 	}
 

@@ -1,6 +1,10 @@
 #ifndef LIBFILEZILLA_FSRESULT_HEADER
 #define LIBFILEZILLA_FSRESULT_HEADER
 
+/** \file
+ * \brief \ref fz::result and \ref fz::rwresult wrappers for dealing with file system errors.
+ */
+
 #include "private/visibility.hpp"
 
 #include <stdint.h>
@@ -56,6 +60,15 @@ public:
 
 	raw_t raw_{};
 };
+
+/**
+ * \brief Holds the result of read/write operations.
+ *
+ * On success, returns the number of bytes read/written.
+ *
+ * The raw error code isn't always available. If available, it is
+ * the value of errno/GetLastError() when the failure occurred.
+ */
 
 class FZ_PUBLIC_SYMBOL rwresult final
 {

@@ -706,10 +706,10 @@ time_t datetime::get_time_t() const
 tm datetime::get_tm(zone z) const
 {
 	tm ret{};
-	time_t t = get_time_t();
 #ifdef FZ_WINDOWS
 	// gmtime_s/localtime_s don't work with negative times
-	if (t < 86400) {
+	auto constexpr y2k38_limit = ((int64_t(2) << 31) - 86400) * 1000;
+	if (t_ < 86400000 || (sizeof(time_t) == 4 && t_ >= y2k38_limit)) {
 		FILETIME ft = get_filetime();
 		SYSTEMTIME st;
 		if (FileTimeToSystemTime(&ft, &st)) {
@@ -732,6 +732,7 @@ tm datetime::get_tm(zone z) const
 		}
 	}
 	else {
+		time_t t = get_time_t();
 		// Special case: If having only days, don't perform conversion
 		if (z == utc || a_ == days) {
 			gmtime_s(&ret, &t);
@@ -741,6 +742,7 @@ tm datetime::get_tm(zone z) const
 		}
 	}
 #else
+	time_t t = get_time_t();
 	if (z == utc || a_ == days) {
 		gmtime_r(&t, &ret);
 	}

@@ -38,7 +38,7 @@ public:
 	explicit json(json_type t);
 
 	json_type type() const {
-		return type_;
+		return static_cast<json_type>(value_.index());
 	}
 
 	/// Returns string, number and boolean values as string
@@ -96,7 +96,6 @@ public:
 	/// Sets type to boolean and assigns value
 	template<typename Bool, std::enable_if_t<std::is_same_v<bool, typename std::decay_t<Bool>>, int> = 0>
 	json& operator=(Bool b) {
-		type_ = json_type::boolean;
 		value_ = b;
 		return *this;
 	}
@@ -104,8 +103,7 @@ public:
 	/// Sets type to number and assigns value
 	template<typename T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<bool, typename std::decay_t<T>>, int> = 0>
 	json& operator=(T n) {
-		type_ = json_type::number;
-		value_ = fz::to_string(n);
+		value_.emplace<std::size_t(json_type::number)>(fz::to_string(n));
 		return *this;
 	}
 
@@ -123,17 +121,17 @@ public:
 	json& operator=(json const&);
 	json& operator=(json &&) noexcept;
 
-	explicit operator bool() const { return type_ != json_type::none; }
+	explicit operator bool() const { return type() != json_type::none; }
 
 	bool has_non_null_value() const {
-		return type_ != fz::json_type::none && type_ != fz::json_type::null;
+		return type() != fz::json_type::none && type() != fz::json_type::null;
 	}
 
-	bool is_null() const { return type_ == fz::json_type::null; }
-	bool is_object() const { return type_ == fz::json_type::object; }
-	bool is_array() const { return type_ == fz::json_type::array; }
-	bool is_number() const { return type_ == fz::json_type::number; }
-	bool is_boolean() const { return type_ == fz::json_type::boolean; }
+	bool is_null() const { return type() == fz::json_type::null; }
+	bool is_object() const { return type() == fz::json_type::object; }
+	bool is_array() const { return type() == fz::json_type::array; }
+	bool is_number() const { return type() == fz::json_type::number; }
+	bool is_boolean() const { return type() == fz::json_type::boolean; }
 
 	/** \brief Serializes JSON structure
 	 *
@@ -161,6 +159,8 @@ public:
 	void clear();
 
 private:
+	void to_string_impl(std::string & ret, bool pretty = false, size_t depth = 0) const;
+
 	uint64_t number_value_integer() const;
 	double number_value_double() const;
 
@@ -169,9 +169,16 @@ private:
 
 	static json FZ_PRIVATE_SYMBOL parse(char const*& p, char const* end, size_t max_depth);
 
-	typedef std::variant<std::string, std::map<std::string, json, std::less<>>, std::vector<json>, bool> value_type;
+	typedef std::variant<
+		std::monostate,                           // json_type::none
+		std::nullptr_t,                           // json_type::null
+		std::map<std::string, json, std::less<>>, // json_type::object
+		std::vector<json>,                        // json_type::array
+		std::string,                              // json_type::string,
+		std::string,                              // json_type::number,
+		bool                                      // json_type::boolean
+	> value_type;
 	value_type value_;
-	json_type type_{json_type::none};
 };
 
 template <bool isconst>
@@ -181,9 +188,9 @@ struct json_array_iterator final {
 	struct sentinel final {};
 
 	json_array_iterator(json_ref_t j)
-	    // 0 if it's an array, -1 otherwise
-	    : idx_((j.type() == json_type::array)-1)
-	    , json_(j)
+		// 0 if it's an array, -1 otherwise
+		: idx_((j.type() == json_type::array)-1)
+		, json_(j)
 	{}
 
 	json_array_iterator & operator++()

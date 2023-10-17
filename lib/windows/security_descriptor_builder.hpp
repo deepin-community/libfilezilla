@@ -53,6 +53,7 @@ private:
 };
 
 std::string GetSidFromToken(HANDLE h);
+bool DropAdminPrivilegesFromToken(HANDLE h);
 }
 
 #endif

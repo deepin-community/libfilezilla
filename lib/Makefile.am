@@ -1,6 +1,11 @@
 lib_LTLIBRARIES = libfilezilla.la
 
 libfilezilla_la_SOURCES = \
+	aio/aio.cpp \
+	aio/reader.cpp \
+	aio/writer.cpp \
+	aio/xml_writer.cpp \
+	ascii_layer.cpp \
 	buffer.cpp \
 	encode.cpp \
 	encryption.cpp \
@@ -9,6 +14,12 @@ libfilezilla_la_SOURCES = \
 	event_loop.cpp \
 	file.cpp \
 	hash.cpp \
+	http/client.cpp \
+	http/client_request.cpp \
+	http/client_response.cpp \
+	http/digest.cpp \
+	http/headers.cpp \
+	http/throttler.cpp \
 	hostname_lookup.cpp \
 	impersonation.cpp \
 	invoker.cpp \
@@ -37,9 +48,15 @@ libfilezilla_la_SOURCES = \
 	translate.cpp \
 	uri.cpp \
 	util.cpp \
-	version.cpp
+	version.cpp \
+	xml.cpp
 
 nobase_include_HEADERS = \
+	libfilezilla/aio/aio.hpp \
+	libfilezilla/aio/reader.hpp \
+	libfilezilla/aio/writer.hpp \
+	libfilezilla/aio/xml_writer.hpp \
+	libfilezilla/ascii_layer.hpp \
 	libfilezilla/apply.hpp \
 	libfilezilla/buffer.hpp \
 	libfilezilla/encode.hpp \
@@ -51,6 +68,11 @@ nobase_include_HEADERS = \
 	libfilezilla/format.hpp \
 	libfilezilla/fsresult.hpp \
 	libfilezilla/hash.hpp \
+	libfilezilla/http/client.hpp \
+	libfilezilla/http/client_request.hpp \
+	libfilezilla/http/client_response.hpp \
+	libfilezilla/http/digest.hpp \
+	libfilezilla/http/headers.hpp \
 	libfilezilla/hostname_lookup.hpp \
 	libfilezilla/impersonation.hpp \
 	libfilezilla/invoker.hpp \
@@ -82,6 +104,7 @@ nobase_include_HEADERS = \
 	libfilezilla/uri.hpp \
 	libfilezilla/util.hpp \
 	libfilezilla/visibility_helper.hpp \
+	libfilezilla/xml.hpp \
 	libfilezilla/private/defs.hpp \
 	libfilezilla/private/visibility.hpp \
 	libfilezilla/glue/wx.hpp \
@@ -94,9 +117,9 @@ libfilezilla_la_LDFLAGS = $(AM_LDFLAGS)
 libfilezilla_la_LIBADD = $(libdeps)
 
 dist_noinst_HEADERS = \
+	http/throttler.hpp \
 	tls_layer_impl.hpp \
 	tls_system_trust_store_impl.hpp \
-	windows/dll.hpp \
 	windows/poller.hpp \
 	windows/security_descriptor_builder.hpp \
 	unix/poller.hpp
@@ -111,7 +134,8 @@ libfilezilla_la_SOURCES += \
 
 nobase_include_HEADERS += \
 	libfilezilla/glue/registry.hpp \
-	libfilezilla/glue/windows.hpp
+	libfilezilla/glue/windows.hpp \
+	libfilezilla/glue/dll.hpp
 
 windows/libfilezilla_rc.o: $(srcdir)/windows/libfilezilla.rc $(srcdir)/windows/manifest.xml windows/version.rc
 	@if [ -f $@~ ]; then rm $@~; fi

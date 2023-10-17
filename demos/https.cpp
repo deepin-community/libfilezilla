@@ -1,164 +1,121 @@
-#include <libfilezilla/buffer.hpp>
+#include <libfilezilla/aio/aio.hpp>
 #include <libfilezilla/event_handler.hpp>
+#include <libfilezilla/http/client.hpp>
 #include <libfilezilla/logger.hpp>
 #include <libfilezilla/socket.hpp>
-#include <libfilezilla/thread_pool.hpp>
 #include <libfilezilla/tls_layer.hpp>
 #include <libfilezilla/tls_system_trust_store.hpp>
-#include <libfilezilla/util.hpp>
 
-#include <iostream>
-#include <type_traits>
+using namespace std::literals;
 
-namespace {
-struct logger : public fz::logger_interface
-{
-	logger()
-	{
-		// For debugging
-		// set_all(static_cast<fz::logmsg::type>(~std::underlying_type_t<fz::logmsg::type>(0)));
-	}
+typedef fz::http::client::request_response_holder<fz::http::client::request, fz::http::client::response> request_response;
 
-	virtual void do_log(fz::logmsg::type t, std::wstring && msg) {
-		std::cerr << "Log: " << int(t) << " " << fz::to_string(msg) << "\n";
-	}
-};
-}
-
-// A simple event handler
-class handler final : public fz::event_handler
+class client : public fz::event_handler, public fz::http::client::client
 {
 public:
-	handler(fz::event_loop& l, std::string const& host)
-	    : fz::event_handler(l)
-	    , trust_store_(pool_)
+	client(std::vector<fz::uri> uris, fz::event_loop & loop, fz::aio_buffer_pool & buffer_pool, fz::logger_interface & logger)
+		: fz::event_handler(loop)
+		, fz::http::client::client(*this, buffer_pool, logger, "libfilezilla_https_demo")
+		, logger_(logger)
+		, trust_store_(pool_)
 	{
-		s_ = std::make_unique<fz::socket>(pool_, this);
-		int res = s_->connect(fz::to_native(host), 443);
-		if (res) {
-			log_.log(fz::logmsg::error, "Connect failed with %s", fz::socket_error_description(res));
-			event_loop_.stop();
-			return;
+		for (auto const& uri : uris) {
+			auto srr = std::make_shared<request_response>();
+			srr->request_.uri_ = uri;
+			srr->request_.headers_["Connection"] = "keep-alive";
+			if (add_request(srr)) {
+				requests_.push_back(srr);
+			}
 		}
-
-		tls_ = std::make_unique<fz::tls_layer>(event_loop_, this, *s_, &trust_store_, log_);
-		if (!tls_->client_handshake(nullptr, {}, fz::to_native(host))) {
-			log_.log(fz::logmsg::error, "Could not start handshake");
+		if (requests_.empty()) {
 			event_loop_.stop();
-			return;
 		}
-
-		snd_.append("GET / HTTP/1.1\r\nConnection: close\r\nUser-Agent: lfz (socket demo)\r\nHost: ");
-		snd_.append(host);
-		snd_.append("\r\n\r\n");
 	}
 
-	virtual ~handler()
+	~client()
 	{
-		// This _MUST_ be called to avoid a race so that operator()(fz::event_base const&) is not called on a partially destructed object.
 		remove_handler();
+		fz::http::client::client::stop(false);
 	}
 
-	bool success_{};
-
-private:
-	// The event loop calls this function for every event sent to this handler.
-	virtual void operator()(fz::event_base const& ev)
+	virtual fz::socket_interface* create_socket(fz::native_string const& host, unsigned short, bool tls) override
 	{
-		// Dispatch the event to the correct function.
-		fz::dispatch<fz::socket_event>(ev, this, &handler::on_socket_event);
+		destroy_socket();
+		socket_ = std::make_unique<fz::socket>(pool_, nullptr);
+		if (tls) {
+			tls_ = std::make_unique<fz::tls_layer>(event_loop_, nullptr, *socket_, &trust_store_, logger_);
+			tls_->client_handshake({}, {}, host);
+			return tls_.get();
+		}
+		else {
+			return socket_.get();
+		}
 	}
 
-	void on_socket_event(fz::socket_event_source*, fz::socket_event_flag type, int error) {
-		if (error) {
-			auto desc = fz::socket_error_description(error);
-			switch (type) {
-			case fz::socket_event_flag::connection:
-				log_.log(fz::logmsg::error, "Connection failed: %s", desc);
-				break;
-			case fz::socket_event_flag::read:
-				log_.log(fz::logmsg::error, "Reading failed: %s", desc);
-				break;
-			case fz::socket_event_flag::write:
-				log_.log(fz::logmsg::error, "Connection failed %s", desc);
-				break;
-			default:
-				log_.log(fz::logmsg::error, "Unknown error: %s", desc);
-				break;
-			}
+	virtual void destroy_socket() override
+	{
+		tls_.reset();
+		socket_.reset();
+	}
+
+	virtual void operator()(fz::event_base const& ev) override
+	{
+		fz::dispatch<fz::http::client::done_event>(ev, this, &client::on_request_done);
+	}
+
+	void on_request_done(uint64_t, bool success)
+	{
+		auto & srr = requests_.front();
+		if (success) {
+			logger_.log(fz::logmsg::error, "Got response for %s with code %d", srr->req().uri_.to_string(), srr->res().code_);
+		}
+		else {
+			logger_.log(fz::logmsg::error, "Could not read response for %s", srr->req().uri_.to_string());
+		}
+		requests_.pop_front();
+
+		if (requests_.empty()) {
 			event_loop_.stop();
-			return;
-		}
-
-		if (type == fz::socket_event_flag::write || type == fz::socket_event_flag::connection) {
-			while (!snd_.empty()) {
-				int w = tls_->write(snd_.get(), snd_.size(), error);
-				if (w > 0) {
-					snd_.consume(w);
-				}
-				else {
-					if (w < 0) {
-						if (error == EAGAIN) {
-							return;
-						}
-						log_.log(fz::logmsg::error, "Error writing: %", fz::socket_error_description(error));
-					}
-					event_loop_.stop();
-					return;
-				}
-			}
-			log_.log(fz::logmsg::status, "Sent request");
-		}
-		else if (type == fz::socket_event_flag::read) {
-			char buf[1024];
-			while (true) {
-				int r = tls_->read(buf, 1024, error);
-				if (r > 0) {
-					std::cout << std::string_view(buf, r);
-					continue;
-				}
-
-				if (!r) {
-					log_.log(fz::logmsg::status, "Got eof");
-					success_ = true;
-				}
-				else {
-					if (error == EAGAIN) {
-						return;
-					}
-					log_.log(fz::logmsg::error, "Error reading: %s", fz::socket_error_description(error));
-				}
-				event_loop_.stop();
-				return;
-			}
 		}
 	}
 
-	logger log_;
 	fz::thread_pool pool_;
+	fz::logger_interface & logger_;
 	fz::tls_system_trust_store trust_store_;
-	std::unique_ptr<fz::socket> s_;
+
+	std::unique_ptr<fz::socket> socket_;
 	std::unique_ptr<fz::tls_layer> tls_;
-	fz::buffer snd_;
+
+	std::deque<fz::http::client::shared_request_response> requests_;
 };
 
 int main(int argc , char * argv[])
 {
-	if (argc <= 1) {
-		std::cerr << "Need to pass hostname\n";
+	fz::stdout_logger logger;
+	if (argc < 2) {
+		logger.log(fz::logmsg::error, "Pass at least one URI"sv);
 		return 1;
 	}
-
-	std::string host = argv[1];
-
+	std::vector<fz::uri> uris;
+	for (int i = 1; i < argc; ++i) {
+		auto uri = fz::uri(argv[i]);
+		if (!uri) {
+			logger.log(fz::logmsg::error, "Invalid URI: '%s'", argv[i]);
+			return 1;
+		}
+		uris.emplace_back(std::move(uri));
+	}
 	// Start an event loop
-	fz::event_loop l(fz::event_loop::threadless);
+	fz::event_loop loop(fz::event_loop::threadless);
+
+	//logger.set_all(fz::logmsg::type(-1));
 
 	// Create a handler
-	handler h(l, host);
+	fz::aio_buffer_pool buffer_pool(logger, 8);
+	client c(uris, loop, buffer_pool, logger);
 
-	l.run();
+	loop.run();
 
 	// All done.
-	return h.success_ ? 0 : 1;
+	return 0;
 }

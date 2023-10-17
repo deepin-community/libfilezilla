@@ -31,8 +31,8 @@ public:
 	local_filesys(local_filesys const&) = delete;
 	local_filesys& operator=(local_filesys const&) = delete;
 
-	local_filesys(local_filesys &&);
-	local_filesys& operator=(local_filesys &&);
+	local_filesys(local_filesys &&) noexcept;
+	local_filesys& operator=(local_filesys &&) noexcept;
 
 	/// Types of files. While 'everything is a file', a filename can refer to a file proper, a directory or a symbolic link.
 	enum type {

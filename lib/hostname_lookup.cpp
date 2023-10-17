@@ -150,17 +150,14 @@ bool hostname_lookup::lookup(native_string const& host, address_type family)
 namespace {
 void filter_hostname_events(fz::hostname_lookup* lookup, fz::event_handler* handler)
 {
-	auto filter = [&](event_loop::Events::value_type const& ev) -> bool {
-		if (ev.first != handler) {
+	auto filter = [&](event_base const& ev) -> bool {
+		if (ev.derived_type() != hostname_lookup_event::type()) {
 			return false;
 		}
-		else if (ev.second->derived_type() != hostname_lookup_event::type()) {
-			return false;
-		}
-		return std::get<0>(static_cast<hostname_lookup_event const&>(*ev.second).v_) == lookup;
+		return std::get<0>(static_cast<hostname_lookup_event const&>(ev).v_) == lookup;
 	};
 
-	handler->event_loop_.filter_events(filter);
+	handler->filter_events(filter);
 }
 }
 

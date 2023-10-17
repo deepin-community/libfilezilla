@@ -2,6 +2,7 @@
 
 #ifdef FZ_WINDOWS
 
+#include <array>
 #include <map>
 
 #include <sddl.h>
@@ -21,6 +22,7 @@ struct holder final
 	static holder create(size_t s) {
 		holder h;
 		h.v_ = reinterpret_cast<T*>(new uint8_t[s]);
+		h.size_ = s;
 		h.delete_ = true;
 		return h;
 	}
@@ -30,6 +32,7 @@ struct holder final
 		if (delete_) {
 			delete[] reinterpret_cast<uint8_t*>(v_);
 		}
+		size_ = 0;
 		v_ = nullptr;
 	}
 
@@ -37,26 +40,33 @@ struct holder final
 	{
 		holder h;
 		h.v_ = reinterpret_cast<T*>(v);
+		h.size_ = v ? size_t(-1) : 0;
 		h.delete_ = del;
 		return h;
 	}
 
-	holder(holder&& h)
+	holder(holder&& h) noexcept
 		: v_(h.v_)
+		, size_(h.size_)
 	{
 		h.v_ = nullptr;
+		h.size_ = 0;
 		delete_ = h.delete_;
 	}
 
-	holder& operator=(holder&& h) {
+	holder& operator=(holder&& h) noexcept {
 		if (this != &h) {
 			clear();
 			v_ = h.v_;
+			size_ = h.size_;
 			h.v_ = nullptr;
+			h.size_ = 0;
 			delete_ = h.delete_;
 		}
 		return *this;
 	}
+
+	size_t size() const { return size_; }
 
 	explicit operator bool() const { return v_ != nullptr; }
 
@@ -67,8 +77,10 @@ struct holder final
 	T& operator*() { return *v_; }
 	T* operator->() { return v_; }
 
+private:
 	bool delete_{};
-	T* v_;
+	T* v_{};
+	size_t size_{};
 };
 }
 
@@ -205,6 +217,62 @@ std::string GetSidFromToken(HANDLE h)
 		}
 	}
 	return {};
+}
+
+namespace {
+holder<TOKEN_PRIVILEGES> GetPrivileges(HANDLE token)
+{
+	DWORD needed{};
+	GetTokenInformation(token, TokenPrivileges, NULL, 0, &needed);
+	if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+		auto privs = holder<TOKEN_PRIVILEGES>::create(needed);
+		if (GetTokenInformation(token, TokenPrivileges, privs.get(), needed, &needed)) {
+			return privs;
+		}
+	}
+
+	return {};
+}
+}
+
+bool DropAdminPrivilegesFromToken(HANDLE h)
+{
+	auto privs = GetPrivileges(h);
+	if (!privs) {
+		return false;
+	}
+
+	std::array<LUID, 2> allowed;
+	if (!LookupPrivilegeValue(nullptr, SE_INC_WORKING_SET_NAME, &allowed[0])) {
+		return false;
+	}
+	if (!LookupPrivilegeValue(nullptr, SE_CHANGE_NOTIFY_NAME, &allowed[1])) {
+		return false;
+	}
+
+	DWORD out{};
+	for (DWORD i = 0; i < privs->PrivilegeCount; ++i) {
+		bool found{};
+		for (auto const& luid : allowed) {
+			if (std::tie(luid.LowPart, luid.HighPart) == std::tie(privs->Privileges[i].Luid.LowPart, privs->Privileges[i].Luid.HighPart)) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			privs->Privileges[out].Luid = privs->Privileges[i].Luid;
+			privs->Privileges[out].Attributes = SE_PRIVILEGE_REMOVED;
+			++out;
+		}
+	}
+	if (out) {
+		privs->PrivilegeCount = out;
+		if (!AdjustTokenPrivileges(h, false, privs.get(), privs.size(), nullptr, nullptr)) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 }

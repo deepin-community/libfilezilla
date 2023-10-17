@@ -1,5 +1,7 @@
 #!/usr/bin/make -f
-#export DH_VERBOSE = 1
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
 
 # Needed for some unit tests to pass
 export LANG=C.UTF-8

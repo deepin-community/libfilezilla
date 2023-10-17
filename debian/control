@@ -6,7 +6,7 @@ Build-Depends: debhelper-compat (= 13),
                pkg-config,
                nettle-dev (>= 3.1),
                libgnutls28-dev (>= 3.7.0)
-Standards-Version: 4.6.0.1
+Standards-Version: 4.6.2.0
 Rules-Requires-Root: no
 Section: libs
 Homepage: https://lib.filezilla-project.org/
@@ -17,7 +17,7 @@ Package: libfilezilla-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: libfilezilla25 (= ${binary:Version}), ${misc:Depends}
+Depends: libfilezilla40 (= ${binary:Version}), ${misc:Depends}
 Description: build high-performing platform-independent programs (development)
  Free, open source C++ library, offering some basic functionality to build
  high-performing, platform-independent programs. Some of the highlights include:
@@ -51,7 +51,7 @@ Description: build high-performing platform-independent programs (translations)
  This package contains architecture independent files such as images
  and translations.
 
-Package: libfilezilla25
+Package: libfilezilla40
 Architecture: any
 Multi-Arch: same
 Conflicts: libfilezilla0, libfilezilla11, libfilezilla19, libfilezilla21

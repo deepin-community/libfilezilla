@@ -38,7 +38,7 @@
 /// Marks symbols as private, they won't be exported
 #define FZ_EXPORT_PRIVATE
 
-/// Import symbols from a sharde library
+/// Import symbols from a shared library
 #define FZ_IMPORT_SHARED
 
 /// Import symbols from a static library

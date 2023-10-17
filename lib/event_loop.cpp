@@ -17,19 +17,24 @@ namespace fz {
 event_loop::event_loop()
 	: sync_(false)
 	, thread_(std::make_unique<thread>())
+	, timer_thread_(std::make_unique<thread>())
 {
 	thread_->run([this] { entry(); });
+	timer_thread_->run([this] { timer_entry(); });
 }
 
 event_loop::event_loop(thread_pool & pool)
 	: sync_(false)
 {
 	task_ = std::make_unique<async_task>(pool.spawn([this] { entry(); }));
+	timer_task_ = std::make_unique<async_task>(pool.spawn([this] { timer_entry(); }));
 }
 
 event_loop::event_loop(event_loop::loop_option)
 	: sync_(false)
+	, timer_thread_(std::make_unique<thread>())
 {
+	timer_thread_->run([this] { timer_entry(); });
 }
 
 event_loop::~event_loop()
@@ -37,7 +42,13 @@ event_loop::~event_loop()
 	stop(true);
 }
 
-void event_loop::send_event(event_handler* handler, event_base* evt)
+bool event_loop::running() const
+{
+	scoped_lock lock(sync_);
+	return task_ || thread_ || threadless_;
+}
+
+void event_loop::send_event(event_handler* handler, event_base* evt, bool deletable)
 {
 	event_assert(handler);
 	event_assert(evt);
@@ -45,15 +56,17 @@ void event_loop::send_event(event_handler* handler, event_base* evt)
 	{
 		scoped_lock lock(sync_);
 		if (!handler->removing_) {
-			if (pending_events_.empty()) {
+			if (pending_events_.empty() && !active_handler_) {
 				cond_.signal(lock);
 			}
-			pending_events_.emplace_back(handler, evt);
+			pending_events_.emplace_back(handler, evt, deletable);
 			return;
 		}
 	}
 
-	delete evt;
+	if (deletable) {
+		delete evt;
+	}
 }
 
 void event_loop::remove_handler(event_handler* handler)
@@ -65,10 +78,10 @@ void event_loop::remove_handler(event_handler* handler)
 	pending_events_.erase(
 		std::remove_if(pending_events_.begin(), pending_events_.end(),
 			[&](Events::value_type const& v) {
-				if (v.first == handler) {
-					delete v.second;
+				if (std::get<0>(v) == handler && std::get<2>(v)) {
+					delete std::get<1>(v);
 				}
-				return v.first == handler;
+				return std::get<0>(v) == handler;
 			}
 		),
 		pending_events_.end()
@@ -94,19 +107,24 @@ void event_loop::remove_handler(event_handler* handler)
 				l.lock();
 			}
 		}
+		else {
+			resend_ = false;
+		}
 	}
 }
 
-void event_loop::filter_events(std::function<bool(Events::value_type &)> const& filter)
+void event_loop::filter_events(std::function<bool(event_handler*& h, event_base& ev)> const& filter)
 {
 	scoped_lock l(sync_);
 
 	pending_events_.erase(
 		std::remove_if(pending_events_.begin(), pending_events_.end(),
 			[&](Events::value_type & v) {
-				bool const remove = filter(v);
-				if (remove) {
-					delete v.second;
+				auto *& h = std::get<0>(v);
+				bool const remove = filter(h, *std::get<1>(v));
+				event_assert(h);
+				if (remove && std::get<2>(v)) {
+					delete std::get<1>(v);
 				}
 				return remove;
 			}
@@ -115,27 +133,23 @@ void event_loop::filter_events(std::function<bool(Events::value_type &)> const& 
 	);
 }
 
-timer_id event_loop::add_timer(event_handler* handler, duration const& interval, bool one_shot)
+timer_id event_loop::add_timer(event_handler* handler, monotonic_clock const &deadline, duration const& interval)
 {
-	timer_data d;
-	d.handler_ = handler;
-	if (!one_shot) {
-		d.interval_ = interval;
-	}
-	d.deadline_ = monotonic_clock::now() + interval;
+	timer_id id = 0;
+	
+	if (deadline) {
+		timer_data d;
 
-	scoped_lock lock(sync_);
-	if (!handler->removing_) {
-		d.id_ = ++next_timer_id_; // 64bit, can this really ever overflow?
+		scoped_lock lock(sync_);
+		
+		id = setup_timer(lock, d, handler, deadline, interval);
 
-		timers_.emplace_back(d);
-		if (!deadline_ || d.deadline_ < deadline_) {
-			// Our new time is the next timer to trigger
-			deadline_ = d.deadline_;
-			cond_.signal(lock);
+		if (id) {
+			timers_.push_back(std::move(d));
 		}
 	}
-	return d.id_;
+	
+	return id;
 }
 
 void event_loop::stop_timer(timer_id id)
@@ -158,6 +172,49 @@ void event_loop::stop_timer(timer_id id)
 	}
 }
 
+timer_id event_loop::stop_add_timer(timer_id id, event_handler* handler, monotonic_clock const &deadline, duration const& interval)
+{
+	scoped_lock lock(sync_);
+	
+	if (id) {
+		for (auto it = timers_.begin(); it != timers_.end(); ++it) {
+			if (it->id_ == id) {
+				return setup_timer(lock, *it, handler, deadline, interval);
+			}
+		}
+	}
+
+	timer_data d;
+
+	id = setup_timer(lock, d, handler, deadline, interval);
+
+	if (id) {
+		timers_.push_back(std::move(d));
+	}
+
+	return id;
+}
+
+timer_id event_loop::setup_timer(scoped_lock &l, timer_data &d, event_handler* handler,  monotonic_clock const& deadline, duration const& interval)
+{
+	if (handler->removing_) {
+		return 0;
+	}
+
+	d.interval_ = interval;
+	d.deadline_ = deadline;
+	d.handler_ = handler;
+	d.id_ = ++next_timer_id_; // 64bit, can this really ever overflow?
+
+	if (!deadline_ || d.deadline_ < deadline_) {
+		// Our new time is the next timer to trigger
+		deadline_ = d.deadline_;
+		timer_cond_.signal(l);
+	}
+
+	return d.id_;
+}
+
 bool event_loop::process_event(scoped_lock & l)
 {
 	Events::value_type ev{};
@@ -168,16 +225,35 @@ bool event_loop::process_event(scoped_lock & l)
 	ev = pending_events_.front();
 	pending_events_.pop_front();
 
-	event_assert(ev.first);
-	event_assert(ev.second);
-	event_assert(!ev.first->removing_);
+	event_assert(std::get<0>(ev));
+	event_assert(std::get<1>(ev));
+	event_assert(!std::get<0>(ev)->removing_);
 
-	active_handler_ = ev.first;
+	active_handler_ = std::get<0>(ev);
 
 	l.unlock();
-	(*ev.first)(*ev.second);
-	delete ev.second;
-	l.lock();
+
+	event_assert(!resend_);
+
+	(*std::get<0>(ev))(*std::get<1>(ev));
+	if (resend_) {
+		resend_ = false;
+		l.lock();
+		if (!std::get<0>(ev)->removing_) {
+			pending_events_.emplace_back(ev);
+		}
+		else { // Unlikely, but possible to get into this branch branch
+			if (std::get<2>(ev)) {
+				delete std::get<1>(ev);
+			}
+		}
+	}
+	else {
+		if (std::get<2>(ev)) {
+			delete std::get<1>(ev);
+		}
+		l.lock();
+	}
 
 	active_handler_ = nullptr;
 
@@ -186,11 +262,20 @@ bool event_loop::process_event(scoped_lock & l)
 
 void event_loop::run()
 {
-	if (task_ || thread_ || thread_id_ != thread::id()) {
-		return;
+	{
+		scoped_lock l(sync_);
+		if (threadless_ || task_ || thread_ || thread_id_ != thread::id()) {
+			return;
+		}
+		threadless_ = true;
 	}
 
 	entry();
+
+	{
+		scoped_lock l(sync_);
+		threadless_ = false;
+	}
 }
 
 void event_loop::entry()
@@ -201,7 +286,7 @@ void event_loop::entry()
 
 	scoped_lock l(sync_);
 	while (!quit_) {
-		if (process_timers(l, now)) {
+		if (do_timers_ && process_timers(l, now)) {
 			continue;
 		}
 		if (process_event(l)) {
@@ -209,11 +294,30 @@ void event_loop::entry()
 		}
 
 		// Nothing to do, now we wait
-		if (deadline_) {
-			cond_.wait(l, deadline_ - now);
+		cond_.wait(l);
+	}
+}
+
+void event_loop::timer_entry()
+{
+	monotonic_clock now;
+
+	scoped_lock l(sync_);
+	while (!quit_) {
+		if (deadline_ && !do_timers_) {
+			now = fz::monotonic_clock::now();
+			if (deadline_ <= now) {
+				do_timers_ = true;
+				if (pending_events_.empty() && !active_handler_) {
+					cond_.signal(l);
+				}
+			}
+			else {
+				timer_cond_.wait(l, deadline_ - now);
+			}
 		}
 		else {
-			cond_.wait(l);
+			timer_cond_.wait(l);
 		}
 	}
 }
@@ -221,6 +325,7 @@ void event_loop::entry()
 bool event_loop::process_timers(scoped_lock & l, monotonic_clock & now)
 {
 	if (!deadline_) {
+		do_timers_ = false;
 		// There's no deadline
 		return false;
 	}
@@ -228,6 +333,8 @@ bool event_loop::process_timers(scoped_lock & l, monotonic_clock & now)
 	now = monotonic_clock::now();
 	if (now < deadline_) {
 		// Deadline has not yet expired
+		do_timers_ = false;
+		timer_cond_.signal(l);
 		return false;
 	}
 
@@ -265,7 +372,7 @@ bool event_loop::process_timers(scoped_lock & l, monotonic_clock & now)
 			timers_.pop_back();
 		}
 		else {
-			it->deadline_ = now + it->interval_;
+			it->deadline_ = std::max(now, it->deadline_ + it->interval_);
 			if (!deadline_ || it->deadline_ < deadline_) {
 				deadline_ = it->deadline_;
 			}
@@ -285,6 +392,11 @@ bool event_loop::process_timers(scoped_lock & l, monotonic_clock & now)
 		return true;
 	}
 
+	if (deadline_) {
+		do_timers_ = false;
+		timer_cond_.signal(l);
+	}
+
 	return false;
 }
 
@@ -294,15 +406,20 @@ void event_loop::stop(bool join)
 		scoped_lock l(sync_);
 		quit_ = true;
 		cond_.signal(l);
+		timer_cond_.signal(l);
 	}
 
 	if (join) {
 		thread_.reset();
 		task_.reset();
+		timer_thread_.reset();
+		timer_task_.reset();
 
 		scoped_lock lock(sync_);
 		for (auto & v : pending_events_) {
-			delete v.second;
+			if (std::get<2>(v)) {
+				delete std::get<1>(v);
+			}
 		}
 		pending_events_.clear();
 

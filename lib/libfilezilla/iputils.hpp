@@ -2,6 +2,7 @@
 #define LIBFILEZILLA_IPUTILS_HEADER
 
 #include "libfilezilla.hpp"
+#include <optional>
 
 /** \file
  * \brief Various functions to deal with IP address strings
@@ -41,13 +42,22 @@ enum class address_type
 {
 	unknown,
 	ipv4,
-	ipv6
+	ipv6,
+	unix
 };
 
 /** \brief Gets the type of the passed IP address. */
 address_type FZ_PUBLIC_SYMBOL get_address_type(std::string_view const& address);
 address_type FZ_PUBLIC_SYMBOL get_address_type(std::wstring_view const& address);
 
+struct FZ_PUBLIC_SYMBOL network_interface
+{
+	native_string name;
+	std::string mac;
+	std::vector<std::string> addresses;
+};
+
+std::optional<std::vector<network_interface>> FZ_PUBLIC_SYMBOL get_network_interfaces();
 }
 
 #endif

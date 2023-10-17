@@ -33,8 +33,6 @@ class thread_pool;
 class FZ_PUBLIC_SYMBOL event_loop final
 {
 public:
-	typedef std::deque<std::pair<event_handler*, event_base*>> Events;
-
 	/// Spawns a thread and starts the loop
 	event_loop();
 
@@ -64,7 +62,7 @@ public:
 	 *
 	 * Filtering events is a blocking operation and temporarily pauses the loop.
 	 */
-	void filter_events(std::function<bool (Events::value_type&)> const& filter);
+	void filter_events(std::function<bool (event_handler*&, event_base&)> const& filter);
 
 	/** \brief Stops the loop
 	 *
@@ -77,15 +75,22 @@ public:
 	 /// Starts the loop in the caller's thread.
 	void run();
 
+	bool running() const;
+
+	void resend_current_event() {
+		resend_ = true;
+	}
+
 private:
 	friend class event_handler;
 
 	void FZ_PRIVATE_SYMBOL remove_handler(event_handler* handler);
 
-	timer_id FZ_PRIVATE_SYMBOL add_timer(event_handler* handler, duration const& interval, bool one_shot);
+	timer_id FZ_PRIVATE_SYMBOL add_timer(event_handler* handler, monotonic_clock const& deadline, duration const& interval);
 	void FZ_PRIVATE_SYMBOL stop_timer(timer_id id);
+	timer_id FZ_PRIVATE_SYMBOL stop_add_timer(timer_id id, event_handler* handler, monotonic_clock const& deadline, duration const& interval);
 
-	void send_event(event_handler* handler, event_base* evt);
+	void send_event(event_handler* handler, event_base* evt, bool deletable);
 
 	// Process the next (if any) event. Returns true if an event has been processed
 	bool FZ_PRIVATE_SYMBOL process_event(scoped_lock & l);
@@ -94,6 +99,7 @@ private:
 	bool FZ_PRIVATE_SYMBOL process_timers(scoped_lock & l, monotonic_clock& now);
 
 	void FZ_PRIVATE_SYMBOL entry();
+	void FZ_PRIVATE_SYMBOL timer_entry();
 
 	struct FZ_PRIVATE_SYMBOL timer_data final
 	{
@@ -103,13 +109,19 @@ private:
 		duration interval_{};
 	};
 
+	timer_id FZ_PRIVATE_SYMBOL setup_timer(scoped_lock &lock, timer_data &d, event_handler* handler, monotonic_clock const& deadline, duration const& interval);
+
 	typedef std::vector<timer_data> Timers;
 
+	typedef std::deque<std::tuple<event_handler*, event_base*, bool>> Events;
 	Events pending_events_;
 	Timers timers_;
 
-	mutex sync_;
+	mutable mutex sync_;
 	condition cond_;
+
+	condition timer_cond_;
+	bool do_timers_{};
 
 	event_handler * active_handler_{};
 
@@ -122,7 +134,12 @@ private:
 	std::unique_ptr<thread> thread_;
 	std::unique_ptr<async_task> task_;
 
+	std::unique_ptr<thread> timer_thread_;
+	std::unique_ptr<async_task> timer_task_;
+
 	bool quit_{};
+	bool threadless_{};
+	bool resend_{};
 };
 
 }

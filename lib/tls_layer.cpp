@@ -16,14 +16,14 @@ tls_layer::~tls_layer()
 	remove_handler();
 }
 
-bool tls_layer::client_handshake(std::vector<uint8_t> const& required_certificate, std::vector<uint8_t> const& session_to_resume, native_string const& session_hostname)
+bool tls_layer::client_handshake(std::vector<uint8_t> const& required_certificate, std::vector<uint8_t> const& session_to_resume, native_string const& session_hostname, tls_client_flags flags)
 {
-	return impl_->client_handshake(session_to_resume, session_hostname, required_certificate, nullptr);
+	return impl_->client_handshake(session_to_resume, session_hostname, required_certificate, nullptr, flags);
 }
 
-bool tls_layer::client_handshake(event_handler* const verification_handler, std::vector<uint8_t> const& session_to_resume, native_string const& session_hostname)
+bool tls_layer::client_handshake(event_handler* const verification_handler, std::vector<uint8_t> const& session_to_resume, native_string const& session_hostname, tls_client_flags flags)
 {
-	return impl_->client_handshake(session_to_resume, session_hostname, std::vector<uint8_t>(), verification_handler);
+	return impl_->client_handshake(session_to_resume, session_hostname, std::vector<uint8_t>(), verification_handler, flags);
 }
 
 bool tls_layer::server_handshake(std::vector<uint8_t> const& session_to_resume, std::string_view const& preamble, tls_server_flags flags)
@@ -126,14 +126,24 @@ int tls_layer::connect(native_string const& host, unsigned int port, address_typ
 	return impl_->connect(host, port, family);
 }
 
-std::pair<std::string, std::string> tls_layer::generate_selfsigned_certificate(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames)
+std::pair<std::string, std::string> tls_layer::generate_selfsigned_certificate(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, cert_type type, bool ecdsa)
 {
-	return tls_layer_impl::generate_selfsigned_certificate(password, distinguished_name, hostnames);
+	return tls_layer_impl::generate_selfsigned_certificate(password, distinguished_name, hostnames, duration(), type, ecdsa);
 }
 
-std::pair<std::string, std::string> tls_layer::generate_csr(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, bool csr_as_pem)
+std::pair<std::string, std::string> tls_layer::generate_ca_certificate(native_string const& password, std::string const& distinguished_name, duration const& lifetime, bool ecdsa)
 {
-	return tls_layer_impl::generate_csr(password, distinguished_name, hostnames, csr_as_pem);
+	return tls_layer_impl::generate_selfsigned_certificate(password, distinguished_name, {}, lifetime, cert_type::ca, ecdsa);
+}
+
+std::pair<std::string, std::string> tls_layer::generate_csr(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, bool csr_as_pem, cert_type type)
+{
+	return tls_layer_impl::generate_csr(password, distinguished_name, hostnames, csr_as_pem, type);
+}
+
+std::string tls_layer::generate_cert_from_csr(std::pair<std::string, std::string> const& issuer, native_string const& password, std::string const& csr, std::string const& distinguished_name, std::vector<std::string> const& hostnames, duration const& lifetime, cert_type type)
+{
+	return tls_layer_impl::generate_cert_from_csr(issuer, password, csr, distinguished_name, hostnames, lifetime, type);
 }
 
 int tls_layer::shutdown_read()
@@ -225,4 +235,5 @@ void tls_layer::set_unexpected_eof_cb(std::function<bool()> && cb)
 		impl_->set_unexpected_eof_cb(std::move(cb));
 	}
 }
+
 }

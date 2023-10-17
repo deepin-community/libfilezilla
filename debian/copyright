@@ -4,13 +4,13 @@ Upstream-Contact: Tim Kosse <tim.kosse@filezilla-project.org>
 Source: https://lib.filezilla-project.org/
 
 Files: *
-Copyright: 2016-2022 Tim Kosse <tim.kosse@filezilla-project.org>
+Copyright: 2016-2023 Tim Kosse <tim.kosse@filezilla-project.org>
 License: GPL-2+
 
 Files: debian/*
 Copyright: 2016 Adrien Cunin <adri2000@ubuntu.com>
            2016-2017 Gianfranco Costamagna <locutusofborg@debian.org>
-           2019-2022 Phil Wyett <philip.wyett@kathenas.org>
+           2019-2023 Phil Wyett <philip.wyett@kathenas.org>
 License: GPL-2+
 
 License: GPL-2+

@@ -29,9 +29,21 @@
 /// This example lists the contents of the directory given as argument
 /// to the program, or the current working directory if no argument is given.
 
-/// \example https.cpp
+/// \example raw_https.cpp
 /// \brief Demonstrates how to use sockets and the TLS layer.
 ///
 /// This example is a most-trivial HTTPS client that requests "/" on the passed
 /// host and outputs what the server sends verbatim.
+
+/// \example aio.cpp
+/// \brief Demonstrats use of aio readers/writers
+///
+/// Accepts to filenames. Copies contents of first file into second file,
+/// calculatung file hash in the process.
+
+/// \example xml_pp.cpp
+/// \brief Pretty printer for XML received on stdin
+
+/// \example https.cpp
+/// \brief Demonstrates how to use the fz::https::client
 

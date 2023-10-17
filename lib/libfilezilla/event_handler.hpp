@@ -86,13 +86,39 @@ public:
 	 */
 	template<typename T, typename... Args>
 	void send_event(Args&&... args) {
-		event_loop_.send_event(this, new T(std::forward<Args>(args)...));
+		event_loop_.send_event(this, new T(std::forward<Args>(args)...), true);
 	}
 
 	template<typename T>
 	void send_event(T* evt) {
-		event_loop_.send_event(this, evt);
+		event_loop_.send_event(this, evt, true);
 	}
+
+
+	/// Be careful with lifetime.
+	template<typename T>
+	void send_persistent_event(T* evt) {
+		event_loop_.send_event(this, evt, false);
+	}
+
+	/** \brief Adds a timer, returns the timer id.
+	 *
+	 * Once the deadline is reached, you get a timer event from the event loop.
+	 * If the deadline is empty, no timer is actually added and the returned timer id is 0.
+	 *
+	 * If the interval is empty, timers are deleted automatically, otherwise the interval is the period of the timer after the deadline is reached.
+	 *
+	 * For periodic timers, the next event is scheduled right before the callback is called. If multiple
+	 * intervals expire before the timer fires, e.g. under heavy load, only one event is sent.
+	 *
+	 * If multiple different timers have expired, the order in which the callbacks are executed is unspecified,
+	 * there is no fairness guarantee.
+	 *
+	 * Timers take precedence over other queued events.
+	 *
+	 * \note High-frequency timers doing heavy processing can starve other timers and queued events.
+	 */
+	timer_id add_timer(monotonic_clock const &deadline, duration const& interval = {});
 
 	/** \brief Adds a timer, returns the timer id.
 	 *
@@ -117,6 +143,37 @@ public:
 	 * One-shot timers that have fired stop automatically and do not need to be stopped.
 	 */
 	void stop_timer(timer_id id);
+
+	/** Stops the given timer, then adds a new one. Returns the timer id of the newly added timer.
+	 *
+	 * It behaves as-if the two following calls were made in sequence:
+	 *
+	 *     stop_timer(id);
+	 *     return add_timer(deadline, interval);
+	 */
+	timer_id stop_add_timer(timer_id id, monotonic_clock const& deadline, duration const& interval = {});
+
+	/** Stops the given timer, then adds a new one. Returns the timer id of the newly added timer.
+	 *
+	 * It behaves as-if the two following calls were made in sequence:
+	 *
+	 *     stop_timer(id);
+	 *     return add_timer(interval, one_shot);
+	 */
+	timer_id stop_add_timer(timer_id id, duration const& interval, bool one_shot);
+
+	void filter_events(std::function<bool(event_base& ev)> const& filter) {
+		event_loop_.filter_events([&](event_handler*& h, event_base& ev) {
+			if (h != this) {
+				return false;
+			}
+			return filter(ev);
+		});
+	}
+
+	void resend_current_event() {
+		event_loop_.resend_current_event();
+	}
 
 	event_loop & event_loop_;
 private:

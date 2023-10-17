@@ -47,7 +47,7 @@ namespace logmsg
  * The actual string to log gets assembled from the format string and its
  * arguments only if the type is supposed to be logged.
  */
-class logger_interface
+class FZ_PUBLIC_SYMBOL logger_interface
 {
 public:
 	logger_interface() noexcept = default;
@@ -94,6 +94,15 @@ public:
 	{
 		if (should_log(t)) {
 			std::wstring formatted = fz::to_wstring(std::forward<String>(msg));
+			do_log(t, std::move(formatted));
+		}
+	}
+
+	template<typename String>
+	void log_u_raw(logmsg::type t, String&& msg)
+	{
+		if (should_log(t)) {
+			std::wstring formatted = fz::to_wstring_from_utf8(std::forward<String>(msg));
 			do_log(t, std::move(formatted));
 		}
 	}
@@ -168,6 +177,14 @@ public:
 };
 
 null_logger FZ_PUBLIC_SYMBOL & get_null_logger();
+
+/// A simple logger that writes to stdout
+class FZ_PUBLIC_SYMBOL stdout_logger final : public logger_interface
+{
+public:
+	virtual void do_log(logmsg::type, std::wstring &&) override;
+};
+
 
 }
 

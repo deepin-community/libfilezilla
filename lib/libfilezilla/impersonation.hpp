@@ -38,7 +38,11 @@ public:
 	impersonation_token& operator=(impersonation_token&&) noexcept;
 
 	/// Creates an impersonation token, verifying credentials in the proceess
+#if FZ_WINDOWS
+	explicit impersonation_token(fz::native_string const& username, fz::native_string const& password, bool drop_admin_privileges = true);
+#else
 	explicit impersonation_token(fz::native_string const& username, fz::native_string const& password);
+#endif
 
 #if !FZ_WINDOWS
 	/// Doesn't verify credentials
@@ -72,6 +76,9 @@ private:
 /// Applies to the entire current process, calls setuid/setgid
 bool FZ_PUBLIC_SYMBOL set_process_impersonation(impersonation_token const& token);
 #endif
+
+/// Returns the username the calling thread is running under
+native_string FZ_PUBLIC_SYMBOL current_username();
 
 }
 

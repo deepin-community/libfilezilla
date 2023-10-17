@@ -22,15 +22,15 @@ namespace fz {
 class FZ_PUBLIC_SYMBOL nonowning_buffer final
 {
 public:
-	nonowning_buffer() = default;
+	constexpr nonowning_buffer() noexcept = default;
 
-	explicit nonowning_buffer(uint8_t *buffer, size_t capacity)
+	explicit nonowning_buffer(uint8_t *buffer, size_t capacity) noexcept
 		: buffer_(buffer)
 		, capacity_(capacity)
 	{
 	}
 
-	explicit nonowning_buffer(uint8_t *buffer, size_t capacity, size_t size)
+	explicit nonowning_buffer(uint8_t *buffer, size_t capacity, size_t size) noexcept
 		: buffer_(buffer)
 		, capacity_(capacity)
 		, size_(size)
@@ -44,8 +44,8 @@ public:
 	nonowning_buffer(nonowning_buffer const&) = default;
 	nonowning_buffer& operator=(nonowning_buffer const&) = default;
 
-	nonowning_buffer(nonowning_buffer &&) = default;
-	nonowning_buffer& operator=(nonowning_buffer &&) = default;
+	nonowning_buffer(nonowning_buffer &&) noexcept = default;
+	nonowning_buffer& operator=(nonowning_buffer &&) noexcept = default;
 
 	~nonowning_buffer() noexcept = default;
 
@@ -61,6 +61,7 @@ public:
 	 * Aborts if size exceeds capacity.
 	 */
 	void resize(size_t size);
+	void clear() { resize(0); }
 
 	/// Gets element at offset. No safety check
 	uint8_t operator[](size_t offset) { return *(buffer_ + start_ + offset); }
@@ -96,6 +97,8 @@ public:
 
 	void append(uint8_t const* data, size_t len);
 	void append(uint8_t c) { append(&c, 1); }
+
+	std::string_view to_view() const;
 
 private:
 	uint8_t* buffer_{};

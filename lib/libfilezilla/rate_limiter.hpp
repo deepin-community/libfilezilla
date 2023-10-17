@@ -236,7 +236,7 @@ private:
 
 	struct FZ_PRIVATE_SYMBOL data_t {
 		rate::type limit_{rate::unlimited};
-		rate::type merged_tokens_;
+		rate::type merged_tokens_{};
 		rate::type overflow_{};
 		rate::type debt_{};
 		rate::type unused_capacity_{};
@@ -283,17 +283,17 @@ protected:
 	bool waiting(scoped_lock & l, direction::type d);
 
 private:
-	virtual void update_stats(bool & active) override;
-	virtual size_t unsaturated(direction::type const d) const override { return data_[d].unsaturated_ ? 1 : 0; }
+	virtual void update_stats(bool & active) override final;
+	virtual size_t unsaturated(direction::type const d) const override final { return data_[d].unsaturated_ ? 1 : 0; }
 
-	virtual rate::type add_tokens(direction::type const d, rate::type tokens, rate::type limit) override;
-	virtual rate::type distribute_overflow(direction::type const d, rate::type tokens) override;
+	virtual rate::type add_tokens(direction::type const d, rate::type tokens, rate::type limit) override final;
+	virtual rate::type distribute_overflow(direction::type const d, rate::type tokens) override final;
 
-	virtual void unlock_tree() override;
+	virtual void unlock_tree() override final;
 
-	virtual std::array<rate::type, 2> gather_unspent_for_removal() override;
+	virtual std::array<rate::type, 2> gather_unspent_for_removal() override final;
 
-	struct data_t {
+	struct FZ_PRIVATE_SYMBOL data_t {
 		rate::type available_{rate::unlimited};
 		rate::type overflow_multiplier_{1};
 		rate::type bucket_size_{rate::unlimited};

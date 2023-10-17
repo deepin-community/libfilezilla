@@ -4,6 +4,7 @@
 #include "libfilezilla.hpp"
 #include "fsresult.hpp"
 #include "event.hpp"
+#include "time.hpp"
 
 /** \file
  * \brief Header for the #\ref fz::process "process" class
@@ -66,8 +67,9 @@ public:
 	 *
 	 * Event semantic akin to \sa fz::socket
 	 */
-	process(fz::thread_pool & pool, fz::event_handler & handler);
+	process(thread_pool & pool, event_handler & handler);
 
+	/// If process still running, calls process::kill()
 	~process();
 	process(process const&) = delete;
 	process& operator=(process const&) = delete;
@@ -113,14 +115,26 @@ public:
 	bool spawn(impersonation_token const& it, native_string const& cmd, std::vector<native_string> const& args, std::vector<int> const& extra_fds, io_redirection redirect_mode = io_redirection::redirect);
 #endif
 
+	/**
+	 * Forcefully kills the process.
+	 *
+	 * SIGKILL on *nix, TerminateProcess on Windows.
+	 */
+	void kill();
+
 	/** \brief Stops the spawned process
 	 *
-	 * If wait is true, blocks until the process has quit.
-	 * If force is true, kills the task, otherwise politeley asks it to close
+	 * Waits until the process has quit, or the timeout has elapsed. Pass negative timeout to wait indefinately.
 	 *
 	 * Returns whether the process has quit.
+	 *
+	 * Sequence of events:
+	 * - Closes write side of the communication pipe (after this, child
+	 *   will see EOF if reading from its stdin
+	 * - On *nix, SIGTERM is also sent to the process
+	 * - Function waits until the process has stopped or the timeout has expired.
 	 */
-	bool kill(bool wait = true, bool force = false);
+	bool stop(duration const& timeout = {});
 
 	/** \brief Read data from process
 	 *

@@ -74,7 +74,7 @@ public:
 	async_task spawn(std::function<void()> && f);
 
 private:
-	pooled_thread_impl* get_or_create_thread();
+	FZ_PRIVATE_SYMBOL pooled_thread_impl* get_or_create_thread();
 
 	friend class async_task;
 	friend class pooled_thread_impl;

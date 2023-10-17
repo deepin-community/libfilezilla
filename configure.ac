@@ -1,4 +1,4 @@
-﻿AC_INIT([libfilezilla],[0.37.2],[tim.kosse@filezilla-project.org],[],[https://lib.filezilla-project.org/])
+﻿AC_INIT([libfilezilla],[0.44.0],[tim.kosse@filezilla-project.org],[],[https://lib.filezilla-project.org/])
 
 # Update the version information only immediately before a public release of your software
 # If the library source code has changed at all since the last update, then increment revision (‘c:r:a’ becomes ‘c:r+1:a’).
@@ -6,13 +6,13 @@
 # If any interfaces have been added since the last public release, then increment age.
 # If any interfaces have been removed or changed since the last public release, then set age to 0.
 # CURRENT:REVISION:AGE
-LIBRARY_VERSION=27:0:2
+LIBRARY_VERSION=40:0:0
 
 
 AC_CONFIG_HEADERS([config/config.hpp])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR(config)
-AM_INIT_AUTOMAKE([dist-bzip2 no-dist-gzip subdir-objects nostdinc])
+AM_INIT_AUTOMAKE([dist-xz no-dist-gzip subdir-objects nostdinc])
 
 AC_CANONICAL_HOST
 
@@ -118,10 +118,15 @@ CHECK_CLOCK_GETTIME
 AC_CHECK_DECLS([pthread_condattr_setclock], [], [], [[#include <pthread.h>]])
 
 if test "$windows" = "1"; then
-  libdeps="-lws2_32"
+  libdeps="-lws2_32 -liphlpapi"
 else
   libdeps=-lpthread
   CHECK_ICONV([libdeps="$libdeps -liconv"])
+
+  CHECK_MEMFD_CREATE
+  if test "$have_memfd_create" != "yes"; then
+    CHECK_LRT_FOR_SHM_OPEN
+  fi
 
   CHECK_RANDOM
 fi
@@ -162,8 +167,8 @@ fi
 # GMP
 # ---
 
-PKG_CHECK_MODULES([GMP], [gmp],, [
-  AC_MSG_ERROR([gmplib was not found. You can get it from https://gmplib.org/])
+PKG_CHECK_MODULES([GMP], [gmp >= 6.2],, [
+  AC_MSG_ERROR([gmplib 6.2 or greater was not found. You can get it from https://gmplib.org/])
 ])
 
 AC_SUBST(GMP_LIBS)

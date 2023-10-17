@@ -55,6 +55,10 @@ public:
 		return *this;
 	}
 
+	/// Currently only implemented for SHA1
+	std::vector<std::uint8_t> export_state();
+	bool import_state(std::vector<std::uint8_t> const& state);
+
 	class impl;
 private:
 	impl* impl_;
