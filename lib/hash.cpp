@@ -1,10 +1,12 @@
 #include "libfilezilla/libfilezilla.hpp"
 
-#include "libfilezilla/hash.hpp"
+#include "libfilezilla/buffer.hpp"
 #include "libfilezilla/encode.hpp"
+#include "libfilezilla/hash.hpp"
 
 #include <nettle/hmac.h>
 #include <nettle/md5.h>
+#include <nettle/memops.h>
 #include <nettle/pbkdf2.h>
 
 // Undo Nettle's horrible namespace mangling fuckery
@@ -18,10 +20,14 @@
 
 namespace fz {
 
+size_t constexpr max_digest_length = 64;
+
 class hash_accumulator::impl
 {
 public:
 	virtual ~impl() = default;
+
+	virtual size_t digest_size() const = 0;
 
 	virtual std::vector<uint8_t> export_state() {
 		return {};
@@ -37,7 +43,7 @@ public:
 
 	virtual void update(uint8_t const* data, size_t size) = 0;
 	virtual void reinit() = 0;
-	virtual std::vector<uint8_t> digest() = 0;
+	virtual void digest(uint8_t* out) = 0;
 };
 
 class hash_accumulator_md5 final : public hash_accumulator::impl
@@ -47,6 +53,8 @@ public:
 	{
 		reinit();
 	}
+
+	virtual size_t digest_size() const override { return MD5_DIGEST_SIZE; }
 
 	virtual void update(uint8_t const* data, size_t size) override
 	{
@@ -58,12 +66,9 @@ public:
 		nettle_md5_init(&ctx_);
 	}
 
-	virtual std::vector<uint8_t> digest() override
+	virtual void digest(uint8_t* out) override
 	{
-		std::vector<uint8_t> ret;
-		ret.resize(MD5_DIGEST_SIZE);
-		nettle_md5_digest(&ctx_, ret.size(), ret.data());
-		return ret;
+		nettle_md5_digest(&ctx_, MD5_DIGEST_SIZE, out);
 	}
 
 private:
@@ -77,6 +82,8 @@ public:
 	{
 		reinit();
 	}
+
+	virtual size_t digest_size() const override { return SHA1_DIGEST_SIZE; }
 
 	virtual void update(uint8_t const* data, size_t size) override
 	{
@@ -177,10 +184,13 @@ public:
 			h1.update(second.data(), second.size());
 			h2.update(second.data(), second.size());
 
-			if (h1.digest() != digest) {
+			uint8_t buf[20];
+			h1.digest(buf);
+			if (memcmp(buf, digest.data(), 20)) {
 				return false;
 			}
-			if (h2.digest() != digest) {
+			h2.digest(buf);
+			if (memcmp(buf, digest.data(), 20)) {
 				return false;
 			}
 
@@ -189,12 +199,9 @@ public:
 		return result;
 	}
 
-	virtual std::vector<uint8_t> digest() override
+	virtual void digest(uint8_t* out) override
 	{
-		std::vector<uint8_t> ret;
-		ret.resize(SHA1_DIGEST_SIZE);
-		nettle_sha1_digest(&ctx_, ret.size(), ret.data());
-		return ret;
+		nettle_sha1_digest(&ctx_, SHA1_DIGEST_SIZE, out);
 	}
 
 private:
@@ -209,6 +216,8 @@ public:
 		reinit();
 	}
 
+	virtual size_t digest_size() const override { return SHA256_DIGEST_SIZE; }
+
 	virtual void update(uint8_t const* data, size_t size) override
 	{
 		nettle_sha256_update(&ctx_, size, data);
@@ -219,13 +228,11 @@ public:
 		nettle_sha256_init(&ctx_);
 	}
 
-	virtual std::vector<uint8_t> digest() override
+	virtual void digest(uint8_t* out) override
 	{
-		std::vector<uint8_t> ret;
-		ret.resize(SHA256_DIGEST_SIZE);
-		nettle_sha256_digest(&ctx_, ret.size(), ret.data());
-		return ret;
+		nettle_sha256_digest(&ctx_, SHA256_DIGEST_SIZE, out);
 	}
+
 
 private:
 	sha256_ctx ctx_;
@@ -239,6 +246,8 @@ public:
 		reinit();
 	}
 
+	virtual size_t digest_size() const override { return SHA512_DIGEST_SIZE; }
+
 	virtual void update(uint8_t const* data, size_t size) override
 	{
 		nettle_sha512_update(&ctx_, size, data);
@@ -249,16 +258,43 @@ public:
 		nettle_sha512_init(&ctx_);
 	}
 
-	virtual std::vector<uint8_t> digest() override
+	virtual void digest(uint8_t* out) override
 	{
-		std::vector<uint8_t> ret;
-		ret.resize(SHA512_DIGEST_SIZE);
-		nettle_sha512_digest(&ctx_, ret.size(), ret.data());
-		return ret;
+		nettle_sha512_digest(&ctx_, SHA512_DIGEST_SIZE, out);
 	}
 
 private:
 	sha512_ctx ctx_;
+};
+
+class hash_accumulator_hmac_sha256 final : public hash_accumulator::impl
+{
+public:
+	hash_accumulator_hmac_sha256(std::vector<uint8_t> const& key)
+	{
+		nettle_hmac_sha256_set_key(&ctx_, key.size(), key.data());
+	}
+
+	virtual size_t digest_size() const override { return SHA256_DIGEST_SIZE; }
+
+	virtual void update(uint8_t const* data, size_t size) override
+	{
+		nettle_hmac_sha256_update(&ctx_, size, data);
+	}
+
+	virtual void reinit() override
+	{
+		uint8_t buf[SHA256_DIGEST_SIZE];
+		nettle_hmac_sha256_digest(&ctx_, SHA256_DIGEST_SIZE, buf);
+	}
+
+	virtual void digest(uint8_t* out) override
+	{
+		nettle_hmac_sha256_digest(&ctx_, SHA256_DIGEST_SIZE, out);
+	}
+
+private:
+	hmac_sha256_ctx ctx_;
 };
 
 hash_accumulator::hash_accumulator(hash_algorithm algorithm)
@@ -279,9 +315,23 @@ hash_accumulator::hash_accumulator(hash_algorithm algorithm)
 	}
 }
 
+hash_accumulator::hash_accumulator(hmac_algorithm algorithm, std::vector<uint8_t> const& key)
+{
+	switch (algorithm) {
+	case hmac_algorithm::sha256:
+		impl_ = new hash_accumulator_hmac_sha256(key);
+		break;
+	}
+}
+
 hash_accumulator::~hash_accumulator()
 {
 	delete impl_;
+}
+
+size_t hash_accumulator::digest_size() const
+{
+	return impl_->digest_size();
 }
 
 void hash_accumulator::reinit()
@@ -315,9 +365,41 @@ void hash_accumulator::update(uint8_t const* data, size_t size)
 	impl_->update(data, size);
 }
 
+void hash_accumulator::update(buffer const& data)
+{
+	if (!data.empty()) {
+		impl_->update(data.get(), data.size());
+	}
+}
+
 std::vector<uint8_t> hash_accumulator::digest()
 {
-	return impl_->digest();
+	std::vector<uint8_t> ret;
+	ret.resize(impl_->digest_size());
+	impl_->digest(ret.data());
+	return ret;
+}
+
+void hash_accumulator::digest(uint8_t* out, size_t s)
+{
+	if (out && s == impl_->digest_size()) {
+		impl_->digest(out);
+	}
+}
+
+bool hash_accumulator::is_digest(std::string_view const& ref)
+{
+	return is_digest(reinterpret_cast<uint8_t const*>(ref.data()), ref.size());
+}
+
+bool hash_accumulator::is_digest(uint8_t const* ref, size_t s)
+{
+	if (!ref || s != impl_->digest_size()) {
+		return false;
+	}
+	uint8_t buf[max_digest_length];
+	impl_->digest(buf);
+	return memeql_sec(ref, buf, s);
 }
 
 std::vector<std::uint8_t> hash_accumulator::export_state()
@@ -352,7 +434,10 @@ std::vector<uint8_t> md5_impl(DataContainer const& in)
 	if (!in.empty()) {
 		acc.update(reinterpret_cast<uint8_t const*>(in.data()), in.size());
 	}
-	return acc.digest();
+	std::vector<uint8_t> ret;
+	ret.resize(MD5_DIGEST_SIZE);
+	acc.digest(ret.data());
+	return ret;
 }
 
 template<typename DataContainer>
@@ -364,7 +449,11 @@ std::vector<uint8_t> sha1_impl(DataContainer const& in)
 	if (!in.empty()) {
 		acc.update(reinterpret_cast<uint8_t const*>(in.data()), in.size());
 	}
-	return acc.digest();
+	std::vector<uint8_t> ret;
+	ret.resize(SHA1_DIGEST_SIZE);
+	acc.digest(ret.data());
+	return ret;
+
 }
 
 template<typename DataContainer>
@@ -376,7 +465,11 @@ std::vector<uint8_t> sha256_impl(DataContainer const& in)
 	if (!in.empty()) {
 		acc.update(reinterpret_cast<uint8_t const*>(in.data()), in.size());
 	}
-	return acc.digest();
+	std::vector<uint8_t> ret;
+	ret.resize(SHA256_DIGEST_SIZE);
+	acc.digest(ret.data());
+	return ret;
+
 }
 
 template<typename DataContainer>
@@ -388,7 +481,11 @@ std::vector<uint8_t> sha512_impl(DataContainer const& in)
 	if (!in.empty()) {
 		acc.update(reinterpret_cast<uint8_t const*>(in.data()), in.size());
 	}
-	return acc.digest();
+	std::vector<uint8_t> ret;
+	ret.resize(SHA512_DIGEST_SIZE);
+	acc.digest(ret.data());
+	return ret;
+
 }
 
 template<typename KeyContainer, typename DataContainer>

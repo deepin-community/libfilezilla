@@ -1,4 +1,5 @@
 #include "libfilezilla/buffer.hpp"
+#include "libfilezilla/util.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -248,6 +249,20 @@ std::string_view buffer::to_view() const
 	}
 
 	return {reinterpret_cast<char const*>(get()), size()};
+}
+
+void buffer::wipe()
+{
+	fz::wipe(data_, capacity_);
+}
+
+void buffer::wipe_unused()
+{
+	size_t start = pos_ - data_;
+	fz::wipe(data_, start);
+
+	size_t stop = capacity_ - (start + size_);
+	fz::wipe(pos_ + size_, stop);
 }
 
 }

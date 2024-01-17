@@ -1,3 +1,37 @@
+libfilezilla (0.45.0-5) unstable; urgency=medium
+
+  [ Gianfranco Costamagna ]
+  * d/rules: Ignore 'GNUTLS_SYSTEM_PRIORITY_FILE'.
+  * Drop not required 'disable-ssl-tests.patch'.
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Tue, 28 Nov 2023 14:21:33 +0000
+
+libfilezilla (0.45.0-4) unstable; urgency=medium
+
+  [ Gianfranco Costamagna ]
+  * Disable tls1.0 and tls1.1 tests, deprecated. (Closes: #1055633).
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Thu, 09 Nov 2023 19:59:31 +0000
+
+libfilezilla (0.45.0-3) unstable; urgency=medium
+
+  * Update override to: debian-watch-does-not-check-openpgp-signature
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Wed, 08 Nov 2023 22:25:13 +0000
+
+libfilezilla (0.45.0-2) unstable; urgency=medium
+
+  * Source only upload for migration to testing.
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Thu, 02 Nov 2023 01:28:13 +0000
+
+libfilezilla (0.45.0-1) unstable; urgency=medium
+
+  * New upstream 0.45.0.
+  * Soname bump rename package to libfilezilla41.
+
+ -- Phil Wyett <philip.wyett@kathenas.org>  Wed, 25 Oct 2023 04:15:45 +0100
+
 libfilezilla (0.44.0-3) unstable; urgency=medium
 
   * Change d/gbp.conf compression to xz.

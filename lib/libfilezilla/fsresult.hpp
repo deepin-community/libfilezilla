@@ -41,8 +41,11 @@ public:
 		/// Requested dir does not exist or is not a dir
 		nodir,
 
-		/// Out of disk space
+		/// Out of disk space (physical, or space quota)
 		nospace,
+
+		/// Dynamic resource utilization, like too many open files
+		resource_limit,
 
 		/// Some other error
 		other

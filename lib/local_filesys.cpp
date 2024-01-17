@@ -391,6 +391,8 @@ result local_filesys::begin_find_files(native_string path, bool dirs_only, bool 
 		switch (err) {
 		case ERROR_ACCESS_DENIED:
 			return result{result::noperm, err};
+		case ERROR_TOO_MANY_OPEN_FILES:
+			return {result::resource_limit, err};
 		default:
 			return result{result::other, err};
 		}
@@ -413,6 +415,9 @@ result local_filesys::begin_find_files(native_string path, bool dirs_only, bool 
 			case ENOTDIR:
 			case ENOENT:
 				return {result::nodir, err};
+			case EMFILE:
+			case ENFILE:
+				return {result::resource_limit, err};
 			default:
 				return {result::other, err};
 		}
@@ -461,6 +466,9 @@ result local_filesys::begin_find_files(int fd, bool dirs_only, bool query_symlin
 			case ENOTDIR:
 			case ENOENT:
 				return {result::nodir, err};
+			case EMFILE:
+			case ENFILE:
+				return {result::resource_limit, err};
 			default:
 				return {result::other, err};
 		}
@@ -945,6 +953,7 @@ result do_mkdir(native_string const& path, mkdir_permissions permissions)
 	case ERROR_ACCESS_DENIED:
 		return {result::noperm, err};
 	case ERROR_DISK_FULL:
+	case ERROR_DISK_QUOTA_EXCEEDED:
 		return {result::nospace, err};
 	default:
 		return {result::other, err};
@@ -1193,6 +1202,7 @@ result rename_file(native_string const& source, native_string const& dest, bool 
 		case ERROR_ACCESS_DENIED:
 			return {result::noperm, err};
 		case ERROR_DISK_FULL:
+		case ERROR_DISK_QUOTA_EXCEEDED:
 			return {result::nospace, err};
 		default:
 			return {result::other, err};
@@ -1209,6 +1219,7 @@ result rename_file(native_string const& source, native_string const& dest, bool 
 	case EACCES:
 		return {result::noperm, err};
 	case ENOSPC:
+	case EDQUOT:
 		return {result::nospace, err};
 	case ENOTDIR:
 		return {result::nodir, err};

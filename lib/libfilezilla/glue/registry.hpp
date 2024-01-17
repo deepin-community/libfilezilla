@@ -65,6 +65,8 @@ public:
 		return key_.has_value();
 	}
 
+	bool delete_value(std::wstring const& name);
+
 private:
 	mutable std::optional<HKEY> key_;
 };

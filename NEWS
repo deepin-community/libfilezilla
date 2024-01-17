@@ -1,3 +1,10 @@
+0.45.0 (2023-10-11)
+
++ fz::hash_accumulator now also works with hmac_sha256
++ Added is_digest and digest_size to fz::hash_acumulator
++ MSW: Added function to delete registry values
+- Fixed a crash and a stall in the HTTP client
+
 0.44.0 (2023-06-28)
 
 + Exportable hash accumulator state

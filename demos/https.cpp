@@ -35,7 +35,7 @@ public:
 	~client()
 	{
 		remove_handler();
-		fz::http::client::client::stop(false);
+		destroy();
 	}
 
 	virtual fz::socket_interface* create_socket(fz::native_string const& host, unsigned short, bool tls) override

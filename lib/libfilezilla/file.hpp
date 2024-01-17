@@ -203,10 +203,10 @@ private:
 bool FZ_PUBLIC_SYMBOL remove_file(native_string const& name);
 
 inline file::creation_flags operator|(file::creation_flags lhs, file::creation_flags rhs) {
-	return static_cast<file::creation_flags>(static_cast<unsigned int>(lhs) | rhs);
+	return static_cast<file::creation_flags>(static_cast<std::underlying_type_t<file::creation_flags>>(lhs) | static_cast<std::underlying_type_t<file::creation_flags>>(rhs));
 }
 inline file::creation_flags& operator|=(file::creation_flags & lhs, file::creation_flags rhs) {
-	lhs = static_cast<file::creation_flags>(static_cast<unsigned int>(lhs) | rhs);
+	lhs = lhs | rhs;
 	return lhs;
 }
 

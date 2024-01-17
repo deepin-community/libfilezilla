@@ -1,3 +1,4 @@
+#include "libfilezilla/buffer.hpp"
 #include "libfilezilla/util.hpp"
 #include "libfilezilla/time.hpp"
 
@@ -178,6 +179,15 @@ void random_bytes(size_t size, uint8_t* destination)
 	}
 }
 
+void random_bytes(size_t size, buffer& destination)
+{
+	if (!size) {
+		return;
+	}
+	random_bytes(size, destination.get(size));
+	destination.add(size);
+}
+
 
 uint64_t bitscan(uint64_t v)
 {
@@ -214,6 +224,54 @@ bool equal_consttime(std::basic_string_view<uint8_t> const& lhs, std::basic_stri
 	}
 
 	return nettle_memeql_sec(lhs.data(), rhs.data(), lhs.size()) != 0;
+}
+
+void wipe(void* p, size_t n)
+{
+	if (p && n) {
+#if FZ_WINDOWS
+		SecureZeroMemory(p, n);
+#else
+		// TODO: Consider using explicit_bzero or memset_s where available.
+		// Eventually C23's memset_explicit perhaps across all platforms?
+		volatile unsigned char* vp = reinterpret_cast<volatile unsigned char*>(p);
+		while (n--){
+			*vp++ = 0;
+		}
+#endif
+	}
+}
+
+void wipe(std::string & s)
+{
+	size_t const orig_size = s.size();
+	s.resize(s.capacity());
+	wipe(s.data(), s.size());
+	s.resize(orig_size);
+}
+
+void wipe_unused(std::string & s)
+{
+	size_t const orig_size = s.size();
+	s.resize(s.capacity());
+	wipe(s.data() + orig_size, s.size() - orig_size);
+	s.resize(orig_size);
+}
+
+void wipe(std::vector<uint8_t> & v)
+{
+	size_t const orig_size = v.size();
+	v.resize(v.capacity());
+	wipe(v.data() + orig_size, v.size() - orig_size);
+	v.resize(orig_size);
+}
+
+void wipe_unused(std::vector<uint8_t> & v)
+{
+	size_t const orig_size = v.size();
+	v.resize(v.capacity());
+	wipe(v.data() + orig_size, v.size() - orig_size);
+	v.resize(orig_size);
 }
 
 }

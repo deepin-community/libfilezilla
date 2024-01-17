@@ -96,10 +96,11 @@ public:
 
 	/**
 	 * \brief Stops the client, deletes all requests.
-	 *
-	 * Must be called in the destructor of the derived class with keep_alive set to false.
 	 */
 	void stop(bool keep_alive);
+
+	/// Must be called in the destructor of the derived class
+	void destroy();
 
 protected:
 	virtual void on_alive() {}

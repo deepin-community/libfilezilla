@@ -103,7 +103,10 @@ result file::open(native_string const& f, mode m, creation_flags d)
 		case ERROR_ACCESS_DENIED:
 			return {result::noperm, err};
 		case ERROR_DISK_FULL:
+		case ERROR_DISK_QUOTA_EXCEEDED:
 			return {result::nospace, err};
+		case ERROR_TOO_MANY_OPEN_FILES:
+			return {result::resource_limit, err};
 		default:
 			return {result::other, err};
 		}
@@ -273,6 +276,9 @@ result file::open(native_string const& f, mode m, creation_flags d)
 		case EDQUOT:
 		case ENOSPC:
 			return {result::nospace, err};
+		case EMFILE:
+		case ENFILE:
+			return {result::resource_limit, err};
 		default:
 			return {result::other, err};
 		}

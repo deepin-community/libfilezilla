@@ -1,2 +1,2 @@
-libfilezilla source: debian-watch-does-not-check-gpg-signature
+libfilezilla source: debian-watch-does-not-check-openpgp-signature
 libfilezilla source: very-long-line-length-in-source-file

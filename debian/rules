@@ -10,6 +10,13 @@ export LC_ALL=C.UTF-8
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export DEB_LDFLAGS_MAINT_APPEND = -latomic
 
+# some OS such as Ubuntu drop tls1.0 and tls1.1 via /etc/gnutls/config setting
+# http://launchpadlibrarian.net/694703700/gnutls28_3.8.1-4ubuntu2_3.8.1-4ubuntu3.diff.gz
+# http://launchpadlibrarian.net/698244635/gnutls28_3.8.1-4ubuntu3_3.8.1-4ubuntu4.diff.gz
+# This makes testsuite fail, so for now the best way to deal with it, is probably
+# to just ignore the conf file for our tests.
+export GNUTLS_SYSTEM_PRIORITY_FILE=/dev/null
+
 %:
 	dh $@
 

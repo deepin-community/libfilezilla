@@ -13,7 +13,7 @@ class logger_interface;
 /**
  * \brief Represents all relevant information of a X.509 certificate as used by TLS.
  */
-class x509_certificate final
+class FZ_PUBLIC_SYMBOL x509_certificate final
 {
 public:
 	/// A subject name, typically a DNS hostname
@@ -150,7 +150,7 @@ native_string FZ_PUBLIC_SYMBOL check_certificate_status(std::string_view const& 
  * Includes flags whether the certificate chain is trusted by the system
  * trust store and whether the expected hostname matches.
  */
-class tls_session_info final
+class FZ_PUBLIC_SYMBOL tls_session_info final
 {
 public:
 	tls_session_info() = default;
