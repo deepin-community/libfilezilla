@@ -147,6 +147,10 @@ public:
 	}
 
 	std::string_view to_view() const;
+
+	void wipe();
+	void wipe_unused();
+
 private:
 
 	// Invariants:
@@ -159,6 +163,14 @@ private:
 	size_t size_{};
 	size_t capacity_{};
 };
+
+inline void FZ_PUBLIC_SYMBOL wipe(buffer & b) {
+	b.wipe();
+}
+
+inline void FZ_PUBLIC_SYMBOL wipe_unused(buffer & b) {
+	b.wipe_unused();
+}
 
 }
 

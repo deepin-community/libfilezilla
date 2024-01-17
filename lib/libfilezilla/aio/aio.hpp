@@ -145,7 +145,7 @@ public:
 	}
 
 	/**
-	 * /brief Returns either a buffer lease, or records the passed waiter/handler as waiting.
+	 * \brief Returns either a buffer lease, or records the passed waiter/handler as waiting.
 	 *
 	 * If waiting, do not call get_buffer again until after waiter/handler got signalled.
 	 *

@@ -65,7 +65,7 @@ public:
 
 	/** \brief Creates instance with non-blocking event-based redirected communication
 	 *
-	 * Event semantic akin to \sa fz::socket
+	 * Event semantic akin to \ref fz::socket
 	 */
 	process(thread_pool & pool, event_handler & handler);
 

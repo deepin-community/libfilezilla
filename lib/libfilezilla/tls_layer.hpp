@@ -215,7 +215,7 @@ public:
 	static std::pair<std::string, std::string> generate_csr(native_string const& password, std::string const& distinguished_name, std::vector<std::string> const& hostnames, bool csr_as_pem = true, cert_type type = cert_type::any);
 
 	/**
-	 * /brief Creates a certificate from a CSR.
+	 * \brief Creates a certificate from a CSR.
 	 *
 	 * If DN and hostnames are not given, the DN/hostnames from the CSR are taken.
 	 */

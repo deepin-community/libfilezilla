@@ -55,4 +55,8 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#ifndef ERROR_DISK_QUOTA_EXCEEDED
+#define ERROR_DISK_QUOTA_EXCEEDED 1295
+#endif
+
 #endif

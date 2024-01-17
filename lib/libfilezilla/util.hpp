@@ -42,6 +42,9 @@ std::vector<uint8_t> FZ_PUBLIC_SYMBOL random_bytes(size_t size);
 
 void FZ_PUBLIC_SYMBOL random_bytes(size_t size, uint8_t* destination);
 
+class buffer;
+void FZ_PUBLIC_SYMBOL random_bytes(size_t size, buffer& destination);
+
 /** \brief Returns index of the least-significant set bit
  *
  * For example \c bitscan(12) returns 2
@@ -75,7 +78,7 @@ inline bool equal_consttime(First const& lhs, Second const& rhs)
 }
 
 /**
- * /brief Helper to move-assign guaranteeing same member destruction order as the destructor.
+ * \brief Helper to move-assign guaranteeing same member destruction order as the destructor.
  *
  * The implicity-defined move operator performs a member-wise move
  * (class.copy.assign 15.8.2.12 in the C++17 standard), which can lead to members
@@ -95,6 +98,27 @@ T& move_assign_through_move_constructor(T* p, T&& op) noexcept
 	new (p)T(std::move(op));
 	return *p;
 }
+
+/** \brief Securely wipes the memory.
+ *
+ * Effort has been undertaken such that the compiler does not optimize away
+ * a call to this function.
+ */
+void FZ_PUBLIC_SYMBOL wipe(void* p, size_t n);
+
+/** \brief Securely wipes the entire storage of the container
+ *
+ * Zeroes capacity() bytes.
+ */
+void FZ_PUBLIC_SYMBOL wipe(std::string & s);
+void FZ_PUBLIC_SYMBOL wipe(std::vector<uint8_t> & v);
+
+/** \brief Securely wipes the unused space in these containers
+ *
+ * If capacity() > size(), capacity() - size() bytes are zeroed.
+ */
+void FZ_PUBLIC_SYMBOL wipe_unused(std::string & s);
+void FZ_PUBLIC_SYMBOL wipe_unused(std::vector<uint8_t> & v);
 
 }
 

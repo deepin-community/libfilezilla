@@ -154,6 +154,14 @@ void client::stop(bool keep_alive)
 	}
 }
 
+void client::destroy()
+{
+	if (impl_) {
+		impl_->remove_handler();
+		impl_->stop(false, false);
+	}
+}
+
 client::impl::impl(client & c, aio_buffer_pool * buffer_pool, event_handler & handler, logger_interface & logger, std::string && user_agent)
 	: event_handler(handler.event_loop_)
 	, client_(c)
@@ -549,11 +557,15 @@ continuation client::impl::finalize_response()
 		destroy_socket();
 	}
 
-	if (send_pos_) {
-		--send_pos_;
-	}
 	requests_.pop_front();
 	read_state_ = read_state();
+	if (send_pos_) {
+		if (!socket_) {
+			logger_.log(logmsg::debug_warning, "Server refused keep-alive, but we already sent the next request(s). Must fail the other requests now."sv);
+			return continuation::error;
+		}
+		--send_pos_;
+	}
 
 	if (wait_for_response_before_send_) {
 		wait_for_response_before_send_ = false;

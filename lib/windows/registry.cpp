@@ -143,4 +143,13 @@ bool regkey::set_value(std::wstring const& name, uint64_t value)
 	return key_ && RegSetValueExW(*key_, name.c_str(), 0, type, reinterpret_cast<unsigned char const*>(&value), size) == ERROR_SUCCESS;
 }
 
+bool regkey::delete_value(std::wstring const& name)
+{
+	if (!key_) {
+		return false;
+	}
+	auto ret = RegDeleteValueW(*key_, name.c_str());
+	return ret == ERROR_SUCCESS || ret == ERROR_FILE_NOT_FOUND;
+}
+
 }

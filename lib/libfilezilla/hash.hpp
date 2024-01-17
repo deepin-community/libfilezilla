@@ -21,16 +21,26 @@ enum class hash_algorithm
 	sha512
 };
 
+enum class hmac_algorithm
+{
+	sha256
+};
+
+class buffer;
+
 /// Accumulator for hashing large amounts of data
 class FZ_PUBLIC_SYMBOL hash_accumulator final
 {
 public:
 	/// Creates an initialized accumulator for the passed algorithm
 	hash_accumulator(hash_algorithm algorithm);
+	hash_accumulator(hmac_algorithm algorithm, std::vector<uint8_t> const& key);
 	~hash_accumulator();
 
 	hash_accumulator(hash_accumulator const&) = delete;
 	hash_accumulator& operator=(hash_accumulator const&) = delete;
+
+	size_t digest_size() const;
 
 	void reinit();
 
@@ -38,16 +48,21 @@ public:
 	void update(std::basic_string_view<uint8_t> const& data);
 	void update(std::vector<uint8_t> const& data);
 	void update(uint8_t const* data, size_t size);
+	void update(buffer const& data);
 	void update(uint8_t in) {
 		update(&in, 1);
 	}
 
 	/// Returns the raw digest and reinitializes the accumulator
 	std::vector<uint8_t> digest();
+	void digest(uint8_t* out, size_t s);
 
 	operator std::vector<uint8_t>() {
 		return digest();
 	}
+
+	bool is_digest(std::string_view const& ref);
+	bool is_digest(uint8_t const* ref, size_t s);
 
 	template<typename T>
 	hash_accumulator& operator<<(T && in) {
