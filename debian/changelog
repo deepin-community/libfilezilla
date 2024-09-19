@@ -1,3 +1,9 @@
+libfilezilla (0.45.0-5deepin0) unstable; urgency=medium
+
+  * No source change upload against GCC 12.
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Thu, 19 Sep 2024 22:54:05 +0800
+
 libfilezilla (0.45.0-5) unstable; urgency=medium
 
   [ Gianfranco Costamagna ]
